@@ -37,6 +37,7 @@ export function FirestoreProvider({ children }) {
   const [incomingList, setIncomingList] = useState([])
   const [parties, setPartiesState] = useState(DEFAULT_PARTIES)
   const [products, setProductsState] = useState(DEFAULT_PRODUCTS)
+  const [matchLinks, setMatchLinksState] = useState([])
   const [counter, setCounter] = useState(0)
 
   const [timedOut, setTimedOut] = useState(false)
@@ -60,6 +61,8 @@ export function FirestoreProvider({ children }) {
           (snap) => { if (snap.exists() && Array.isArray(snap.data().list)) setPartiesState(snap.data().list) }))
         unsubs.push(onSnapshot(paths.products(),
           (snap) => { if (snap.exists() && Array.isArray(snap.data().list)) setProductsState(snap.data().list) }))
+        unsubs.push(onSnapshot(paths.matchlinks(),
+          (snap) => { if (snap.exists() && Array.isArray(snap.data().list)) setMatchLinksState(snap.data().list) }))
         unsubs.push(onSnapshot(paths.counter(),
           (snap) => setCounter(snap.exists() ? (snap.data().value || 0) : 0)))
         unsubs.push(onSnapshot(paths.users(),
@@ -75,6 +78,7 @@ export function FirestoreProvider({ children }) {
   // ── writers ──────────────────────────────────────────────────────────────
   const setParties = useCallback((list) => { setPartiesState(list); setDoc(paths.parties(), { list }) }, [])
   const setProducts = useCallback((list) => { setProductsState(list); setDoc(paths.products(), { list }) }, [])
+  const setMatchLinks = useCallback((list) => { setMatchLinksState(list); setDoc(paths.matchlinks(), { list }) }, [])
 
   /**
    * Canonicalise a list of line items (normalize product names) and auto-register
@@ -214,6 +218,7 @@ export function FirestoreProvider({ children }) {
     incoming,
     parties, setParties,
     products, setProducts,
+    matchLinks, setMatchLinks,
     lastUsed: lastUsedStore,
     createChallan,
     peekNextChallanNo,

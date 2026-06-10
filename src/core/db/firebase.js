@@ -54,6 +54,7 @@ export const paths = {
   parties: () => doc(db, 'apps', APP_NS, 'meta', 'parties'),
   products: () => doc(db, 'apps', APP_NS, 'meta', 'products'),
   counter: () => doc(db, 'apps', APP_NS, 'meta', 'counter'),
+  matchlinks: () => doc(db, 'apps', APP_NS, 'meta', 'matchlinks'),
   users: () => collection(db, 'apps', APP_NS, 'users'),
   user: (id) => doc(db, 'apps', APP_NS, 'users', id),
   incoming: () => collection(db, 'apps', APP_NS, 'incoming'),
