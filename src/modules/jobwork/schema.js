@@ -26,6 +26,10 @@ export const challanSchema = [
   // Reconciliation metadata (set only when admin edits/reconciles).
   field({ name: 'reconciled',     label: 'Reconciled',  type: 'toggle', default: false }),
   field({ name: 'reconcileReason', label: 'Reason',     type: 'text',   default: '' }),
+  // Set-off: an admin adjustment movement that clears a leftover short/excess.
+  // Counts toward balances (so pending clears) but is NOT real sent/received
+  // material, so reports exclude it from sent/received totals.
+  field({ name: 'setoff',         label: 'Set-off',     type: 'toggle', default: false }),
 ]
 
 /**

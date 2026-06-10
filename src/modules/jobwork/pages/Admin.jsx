@@ -7,7 +7,7 @@
  */
 import { useState } from 'react'
 import { SearchBar, Select, useToast, Toast } from '../../../core/ui'
-import { fmtDate } from '../../../core/utils/format'
+import { fmtDate, todayStr } from '../../../core/utils/format'
 import { useJobWork } from '../JobWorkContext'
 import { challanTotalQty } from '../logic/challan'
 import { parseJobWorkExcel } from '../logic/excelImport'
@@ -20,12 +20,13 @@ export default function Admin() {
 }
 
 function AdminPanel() {
-  const { challans, logs, parties, setParties, products, setProducts, log } = useJobWork()
+  const { challans, logs, parties, setParties, products, setProducts, log, moves, createChallan } = useJobWork()
   const toast = useToast()
   const [tab, setTab] = useState('reconcile')
 
   const tabs = [
     { k: 'reconcile', t: '🔧 Reconcile' },
+    { k: 'setoff', t: '⚖️ Set-off' },
     { k: 'import', t: '📥 Import' },
     { k: 'logs', t: '📜 Logs' },
     { k: 'manage', t: '⚙️ Manage' },
@@ -46,6 +47,7 @@ function AdminPanel() {
 
       <div className="max-w-2xl mx-auto p-4 space-y-4">
         {tab === 'reconcile' && <Reconcile challans={challans} parties={parties} products={products} log={log} toast={toast} />}
+        {tab === 'setoff' && <SetOff parties={parties} products={products} moves={moves} createChallan={createChallan} log={log} toast={toast} />}
         {tab === 'import' && <ImportExcel parties={parties} toast={toast} />}
         {tab === 'logs' && <Logs logs={logs} />}
         {tab === 'manage' && <Manage challans={challans} logs={logs} parties={parties} setParties={setParties} products={products} setProducts={setProducts} log={log} toast={toast} />}
@@ -144,6 +146,90 @@ function Reconcile({ challans, parties, products, log, toast }) {
           )}
         </div>
       ))}
+    </div>
+  )
+}
+
+/* ── Set-off: admin adjustment that clears a leftover short/excess ────────── */
+function SetOff({ parties, products, moves, createChallan, log, toast }) {
+  const [party, setParty] = useState(parties[0] || '')
+  const [product, setProduct] = useState(products[0] || '')
+  const [qty, setQty] = useState('')
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  // Live balance for the selected party+product (out − in, incl. prior set-offs).
+  const balance = moves.reduce((s, m) =>
+    m.party === party && m.product === product ? s + (m.direction === 'out' ? m.quantity : -m.quantity) : s, 0)
+  const pending = balance > 0, excess = balance < 0
+  const direction = pending ? 'in' : 'out'   // post the opposite movement to clear
+  const max = Math.abs(balance)
+  const amount = Number(qty) || 0
+
+  const apply = async () => {
+    if (busy) return
+    if (!party || !product) return toast.show('Pick party & product')
+    if (balance === 0) return toast.show('Nothing to set off — balance is clear')
+    if (!(amount > 0)) return toast.show('Enter a quantity')
+    if (amount > max) return toast.show(`Cannot exceed the ${max} pcs ${pending ? 'pending' : 'excess'}`)
+    if (!reason.trim()) return toast.show('Reason is required')
+    setBusy(true)
+    try {
+      const c = await createChallan({
+        date: todayStr(), party, direction, gaadi: '',
+        items: [{ product, quantity: amount }],
+        setoff: true, reconciled: true, reconcileReason: reason.trim(),
+      })
+      log('SETOFF', `${party} · ${product} · ${amount} (${direction.toUpperCase()}) → ${c.challanNo} — ${reason.trim()}`, 'admin')
+      toast.show(`Set off ${amount} pcs → ${c.challanNo}`)
+      setQty(''); setReason('')
+    } catch {
+      toast.show('⚠ Could not set off — check internet & retry', 3500)
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="bg-violet-50 border border-violet-200 rounded-xl px-4 py-3 text-sm text-violet-700">
+        Clear a leftover <b>pending</b> or <b>excess</b> balance with an adjustment. It posts a tracked set-off movement (excluded from real sent/received totals) and is recorded in the audit log. Reason is mandatory.
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <span className="text-xs font-bold text-slate-400 uppercase">Party</span>
+            <Select value={party} onChange={e => setParty(e.target.value)} options={parties} className="mt-1" />
+          </div>
+          <div>
+            <span className="text-xs font-bold text-slate-400 uppercase">Material</span>
+            <Select value={product} onChange={e => setProduct(e.target.value)} options={products} className="mt-1" />
+          </div>
+        </div>
+
+        <div className={`rounded-xl px-4 py-3 text-center font-bold ${
+          pending ? 'bg-amber-50 text-amber-700' : excess ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
+          {pending ? `${max} pcs pending` : excess ? `${max} pcs excess (IN > OUT)` : '✓ Balance is clear'}
+        </div>
+
+        {balance !== 0 && (
+          <>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-slate-500 flex-1">Set off (post {direction.toUpperCase()})</span>
+              <input type="number" inputMode="numeric" value={qty} placeholder={String(max)}
+                onChange={e => setQty(e.target.value)}
+                className="w-28 border-2 border-slate-300 rounded-xl px-3 py-2 text-base font-semibold text-center" />
+              <button onClick={() => setQty(String(max))} className="text-xs font-bold text-violet-600 px-2">All</button>
+            </div>
+            <input type="text" value={reason} placeholder="Reason (required) — e.g. scrapped at plater"
+              onChange={e => setReason(e.target.value)}
+              className="w-full border-2 border-slate-300 rounded-xl px-3 py-2 text-sm" />
+            <button disabled={busy} onClick={apply}
+              className="w-full bg-violet-600 text-white rounded-xl py-3 font-bold text-sm disabled:opacity-50">
+              {busy ? 'Setting off…' : `Set off ${amount > 0 ? amount + ' pcs' : ''}`}
+            </button>
+          </>
+        )}
+      </div>
     </div>
   )
 }

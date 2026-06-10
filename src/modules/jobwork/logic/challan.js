@@ -26,6 +26,7 @@ export function flattenChallans(challans) {
         gaadi: c.gaadi,
         challanNo: c.challanNo,
         createdAt: c.createdAt,
+        setoff: !!c.setoff,
       })
     }
   }

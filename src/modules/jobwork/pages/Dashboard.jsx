@@ -5,7 +5,7 @@
 import { useState } from 'react'
 import { fmtDate } from '../../../core/utils/format'
 import { useJobWork } from '../JobWorkContext'
-import { findRedFlags, partyBalances, partyWisePending, findAgingOut } from '../logic/balance'
+import { findRedFlags, partyWisePending, findAgingOut } from '../logic/balance'
 import { OUT_REMINDER_DAYS } from '../config'
 
 export default function Dashboard() {
@@ -24,7 +24,6 @@ export default function Dashboard() {
     .filter(c => inView(c.party))
     .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).slice(0, 5)
   const reconciled = challans.list.filter(c => c.reconciled && inView(c.party))
-  const shownParties = viewParties
 
   return (
     <div className="min-h-screen bg-slate-50 pb-8">
@@ -98,7 +97,7 @@ export default function Dashboard() {
                     <span className="text-orange-400 mx-1.5">·</span><span className="text-orange-700 text-sm">{a.product}</span></div>
                   <div className="text-right">
                     <div className="text-orange-700 font-bold text-sm">{a.pending} pcs pending</div>
-                    <div className="text-xs text-orange-400">out since {fmtDate(a.since)} · {a.ageDays} days</div>
+                    <div className="text-xs text-orange-400">{a.ageDays} days</div>
                   </div>
                 </div>
               ))}
@@ -133,65 +132,6 @@ export default function Dashboard() {
             <span className="text-emerald-700 text-sm font-medium">No alerts — all balances are normal</span>
           </div>
         )}
-
-        {/* Per-party balance tables */}
-        {shownParties.map(party => {
-          const rows = partyBalances(moves, party, products)
-          if (rows.length === 0) return (
-            <div key={party} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-              <div className="bg-slate-700 text-white px-4 py-3 font-bold">{party}</div>
-              <div className="px-4 py-6 text-center text-slate-400 text-sm">No entries yet</div>
-            </div>
-          )
-          const tOut = rows.reduce((s, r) => s + r.out, 0)
-          const tIn = rows.reduce((s, r) => s + r.in, 0)
-          const tBal = tOut - tIn
-          return (
-            <div key={party} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-              <div className="bg-slate-700 text-white px-4 py-3 flex items-center justify-between">
-                <span className="font-bold">{party}</span>
-                <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${tBal > 0 ? 'bg-amber-400/20 text-amber-200' : tBal < 0 ? 'bg-red-400/20 text-red-200' : 'bg-emerald-400/20 text-emerald-200'}`}>
-                  Net Pending: {tBal} pcs
-                </span>
-              </div>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-50 text-xs text-slate-500 uppercase tracking-wide">
-                    <th className="text-left px-4 py-2.5 font-semibold">Product</th>
-                    <th className="text-right px-4 py-2.5 font-semibold">Out</th>
-                    <th className="text-right px-4 py-2.5 font-semibold">In</th>
-                    <th className="text-right px-4 py-2.5 font-semibold">Pending</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {rows.map(({ product, out, in: inn, balance }) => {
-                    const alert = inn > out
-                    return (
-                      <tr key={product} className={alert ? 'bg-red-50' : ''}>
-                        <td className="px-4 py-2.5 font-medium text-slate-700">{alert && '🚩 '}{product}</td>
-                        <td className="px-4 py-2.5 text-right text-slate-600">{out}</td>
-                        <td className="px-4 py-2.5 text-right text-slate-600">{inn}</td>
-                        <td className={`px-4 py-2.5 text-right font-bold ${balance > 0 ? 'text-amber-600' : balance < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                          {balance > 0 ? `${balance} pending` : balance < 0 ? `${Math.abs(balance)} excess` : '✓ Clear'}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr className="bg-slate-100 border-t-2 border-slate-200 font-bold text-sm">
-                    <td className="px-4 py-2.5 text-slate-700">TOTAL</td>
-                    <td className="px-4 py-2.5 text-right text-slate-700">{tOut}</td>
-                    <td className="px-4 py-2.5 text-right text-slate-700">{tIn}</td>
-                    <td className={`px-4 py-2.5 text-right ${tBal > 0 ? 'text-amber-600' : tBal < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                      {tBal > 0 ? `${tBal} pending` : tBal < 0 ? `${Math.abs(tBal)} excess` : '✓ Clear'}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          )
-        })}
 
         {/* Reconciliation summary */}
         {reconciled.length > 0 && (

@@ -20,12 +20,15 @@ import Dashboard from './pages/Dashboard'
 import NewEntry from './pages/NewEntry'
 import ModifyEntry from './pages/ModifyEntry'
 import IncomingFromWelder from './pages/IncomingFromWelder'
+import Matching from './pages/Matching'
+import Reports from './pages/Reports'
 import Export from './pages/Export'
 import Admin from './pages/Admin'
 
-/** Small stats strip for the module home screen. */
-function HomeStats() {
+/** Small stats strip for the module home screen — Admin only. */
+function HomeStats({ owner }) {
   const { challans } = useJobWork()
+  if (!owner) return null
   const m = new Date().getMonth(), y = new Date().getFullYear()
   const thisMonth = challans.list.filter(c => {
     const d = new Date(c.date); return d.getMonth() === m && d.getFullYear() === y
@@ -57,8 +60,10 @@ export const jobworkModule = {
     { key: 'dashboard', title: 'Dashboard',      desc: 'Party-wise pending, alerts & reminders',  icon: '📊', color: 'from-blue-600 to-blue-700',     roles: ['manager', 'owner'], Component: Dashboard },
     { key: 'newEntry',  title: 'New Challan',     desc: 'Bulk multi-product OUT / IN entry',       icon: '➕', color: 'from-emerald-600 to-emerald-700', roles: ['manager', 'owner'], Component: NewEntry },
     { key: 'incoming',  title: 'Incoming From Welder', desc: 'Accept material sent for plating',    icon: '📥', color: 'from-cyan-600 to-cyan-700',     roles: ['manager', 'owner'], Component: IncomingFromWelder },
+    { key: 'matching',  title: 'Matching',        desc: 'Challan-to-challan FIFO matching',        icon: '🔗', color: 'from-teal-600 to-teal-700',     roles: ['manager', 'owner'], Component: Matching },
     { key: 'modify',    title: 'Modify Challans', desc: 'Search & edit recent challans',           icon: '✏️', color: 'from-amber-500 to-amber-600',     roles: ['manager', 'owner'], Component: ModifyEntry },
     { key: 'export',    title: 'Export / Share',  desc: 'Share PDF report on WhatsApp',            icon: '📄', color: 'from-violet-600 to-violet-700',   roles: ['manager', 'owner'], Component: Export },
-    { key: 'admin',     title: 'Admin',           desc: 'Reconcile, import, users, backup',        icon: '⚙️', color: 'from-slate-600 to-slate-700',     roles: ['owner'], Component: Admin },
+    { key: 'reports',   title: 'Reports',         desc: 'Date / party / material totals',          icon: '📈', color: 'from-indigo-600 to-indigo-700',   roles: ['owner'], Component: Reports },
+    { key: 'admin',     title: 'Admin',           desc: 'Reconcile, set-off, import, users, backup', icon: '⚙️', color: 'from-slate-600 to-slate-700',   roles: ['owner'], Component: Admin },
   ],
 }

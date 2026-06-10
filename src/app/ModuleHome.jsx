@@ -3,7 +3,7 @@
  * declared in the module manifest, plus the module's optional HomeStats.
  * Entirely data-driven: no module-specific code here.
  */
-export default function ModuleHome({ module, onOpen }) {
+export default function ModuleHome({ module, onOpen, owner }) {
   const { icon, title, pages, HomeStats } = module
   const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 
@@ -18,7 +18,7 @@ export default function ModuleHome({ module, onOpen }) {
               <p className="text-slate-400 text-xs mt-0.5">{today}</p>
             </div>
           </div>
-          {HomeStats && <HomeStats />}
+          {HomeStats && <HomeStats owner={owner} />}
         </div>
       </div>
 

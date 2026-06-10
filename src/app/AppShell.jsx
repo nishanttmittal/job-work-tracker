@@ -24,7 +24,7 @@ function Console({ module, role, onSwitch, userEmail }) {
           <activePage.Component role={role} owner={role === 'owner'} />
         </>
       ) : (
-        <ModuleHome module={view} onOpen={setActiveKey} />
+        <ModuleHome module={view} onOpen={setActiveKey} owner={role === 'owner'} />
       )}
       {onSwitch && (
         <div className="fixed bottom-0 inset-x-0 bg-slate-900 text-slate-300 px-4 flex items-center justify-between text-xs no-print z-30"
