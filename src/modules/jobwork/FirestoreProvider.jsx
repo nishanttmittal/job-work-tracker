@@ -76,6 +76,21 @@ export function FirestoreProvider({ children }) {
   const setParties = useCallback((list) => { setPartiesState(list); setDoc(paths.parties(), { list }) }, [])
   const setProducts = useCallback((list) => { setProductsState(list); setDoc(paths.products(), { list }) }, [])
 
+  /**
+   * Canonicalise a list of line items (normalize product names) and auto-register
+   * any product not yet in the catalogue. The single chokepoint every write path
+   * (New Challan, welder Accept, Modify/Admin editor, product rename, import) runs
+   * through, so the products registry stays self-healing and the same physical
+   * product always matches as ONE string across apps. Returns the normalized items.
+   */
+  const ingestProducts = useCallback((items) => {
+    const norm = (items || []).map(it => ({ ...it, product: normalizeProductName(it.product) }))
+    const known = new Set(products)
+    const fresh = [...new Set(norm.map(it => it.product).filter(p => p && !known.has(p)))]
+    if (fresh.length) setProducts([...products, ...fresh])
+    return norm
+  }, [products, setProducts])
+
   const log = useCallback((action, detail, by = 'user') => {
     const id = makeId('log')
     setDoc(paths.logDoc(id), { id, ts: new Date().toISOString(), action, detail, by })
@@ -86,10 +101,15 @@ export function FirestoreProvider({ children }) {
     insert: (rec) => {
       const id = rec.id || makeId('c')
       const row = { createdAt: new Date().toISOString(), ...rec, id }
+      if (Array.isArray(rec.items)) row.items = ingestProducts(rec.items)
       setDoc(paths.challan(id), row)
       return row
     },
-    update: (id, patch) => setDoc(paths.challan(id), patch, { merge: true }),
+    update: (id, patch) => setDoc(
+      paths.challan(id),
+      Array.isArray(patch.items) ? { ...patch, items: ingestProducts(patch.items) } : patch,
+      { merge: true },
+    ),
     remove: (id) => deleteDoc(paths.challan(id)),
     removeWhere: (pred) => {
       const hit = challansList.filter(pred)
@@ -126,21 +146,6 @@ export function FirestoreProvider({ children }) {
     update: (id, patch) => setDoc(paths.incomingDoc(id), patch, { merge: true }),
     remove: (id) => deleteDoc(paths.incomingDoc(id)),
   }
-
-  /**
-   * Canonicalise a draft's line items (normalize product names) and auto-register
-   * any product not yet in the catalogue. Keeps the products registry self-healing
-   * so welder-pushed or newly-typed products always appear in dropdowns AND get
-   * counted in balances (the dashboard pending iterates the registry). Returns the
-   * normalized items to store on the challan.
-   */
-  const ingestProducts = useCallback((items) => {
-    const norm = (items || []).map(it => ({ ...it, product: normalizeProductName(it.product) }))
-    const known = new Set(products)
-    const fresh = [...new Set(norm.map(it => it.product).filter(p => p && !known.has(p)))]
-    if (fresh.length) setProducts([...products, ...fresh])
-    return norm
-  }, [products, setProducts])
 
   /** Create one challan with a server-issued unique number (async). */
   const createChallan = useCallback(async (draft) => {
