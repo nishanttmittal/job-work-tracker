@@ -1,0 +1,68 @@
+rules_version = '2';
+// ────────────────────────────────────────────────────────────────────────────
+// Firestore rules for the "unico-operations" project (hosts ALL UNICO apps).
+// Paste in: Firebase Console → Firestore Database → Rules → Publish.
+// Keeps Fitting (LIVE) / Orders unchanged. Welder + Plating are role-based:
+// their `users` list is writable by ADMIN/OWNER only (managers can't self-promote).
+// Day-to-day data stays signed-in read/write. Bootstrap owner can never be locked
+// out. ⚠️ Publish only AFTER confirming Google sign-in works in each app.
+// ────────────────────────────────────────────────────────────────────────────
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- shared helpers ----
+    function signedIn() { return request.auth != null; }
+    function tEmail() { return request.auth != null ? request.auth.token.get('email', '') : ''; }
+    function bootstrapOwner() { return tEmail() in ['nspenterprises24@gmail.com']; }
+
+    // ---- welder role helpers ----
+    function wPath() { return /databases/$(database)/documents/apps/welder/users/$(tEmail()); }
+    function wExists() { return tEmail() != '' && exists(wPath()); }
+    function wData() { return get(wPath()).data; }
+    function wOwner() { return signedIn() && (bootstrapOwner() || (wExists() && wData().role == 'owner' && wData().active == true)); }
+    function wManager() { return signedIn() && (wOwner() || (wExists() && wData().role == 'manager' && wData().active == true)); }
+
+    // ---- plating admin helper ----
+    function pPath() { return /databases/$(database)/documents/apps/platingjobwork/users/$(tEmail()); }
+    function pExists() { return tEmail() != '' && exists(pPath()); }
+    function pOwner() { return signedIn() && (bootstrapOwner() || (pExists() && get(pPath()).data.role == 'owner' && get(pPath()).data.active == true)); }
+
+    // ---- Plating Job Work (role-based on users only) ----
+    match /apps/platingjobwork/challans/{id} { allow read, write: if signedIn(); }
+    match /apps/platingjobwork/logs/{id}     { allow read, write: if signedIn(); }
+    match /apps/platingjobwork/meta/{id}     { allow read, write: if signedIn(); }
+    match /apps/platingjobwork/incoming/{id} { allow read, write: if signedIn(); } // welder→plating queue
+    match /apps/platingjobwork/users/{id}    { allow read: if signedIn(); allow write: if pOwner(); }
+
+    // ---- Fitting (LIVE — unchanged) ----
+    match /apps/fitting/{collection}/{docId} { allow read, write: if signedIn(); }
+    match /apps/fitting { allow read, write: if signedIn(); }
+
+    // ---- Orders (unchanged) ----
+    match /apps/orders/{collection}/{docId} { allow read, write: if signedIn(); }
+    match /apps/orders { allow read, write: if signedIn(); }
+
+    // ---- Welder Contractor (role-based) ----
+    match /apps/welder/dispatches/{id}      { allow read, write: if signedIn(); }
+    match /apps/welder/products/{id}        { allow read, write: if signedIn(); }
+    match /apps/welder/welders/{id}         { allow read, write: if signedIn(); }
+    match /apps/welder/parties/{id}         { allow read, write: if signedIn(); }
+    match /apps/welder/plating_outbox/{id}  { allow read, write: if signedIn(); }
+    match /apps/welder/components/{id}      { allow read, write: if signedIn(); } // raw materials
+    match /apps/welder/receipts/{id}        { allow read, write: if signedIn(); } // stock-in
+    match /apps/welder/adjustments/{id}     { allow read: if signedIn(); allow write: if wOwner(); } // stock set-off (owner)
+    match /apps/welder/logs/{id}            { allow read, write: if signedIn(); }
+    match /apps/welder/meta/{id}            { allow read, write: if signedIn(); }
+    match /apps/welder/rates/{id}    { allow read: if signedIn(); allow write: if wOwner(); }
+    match /apps/welder/ledger/{id}   { allow read: if signedIn(); allow write: if wOwner(); }
+    match /apps/welder/payments/{id} {
+      allow read:           if signedIn();
+      allow create:         if wManager();
+      allow update, delete: if wOwner();
+    }
+    match /apps/welder/users/{id}    { allow read: if signedIn(); allow write: if wOwner(); }
+
+    // Lock everything else.
+    match /{document=**} { allow read, write: if false; }
+  }
+}
