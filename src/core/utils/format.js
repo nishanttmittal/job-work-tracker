@@ -23,3 +23,18 @@ export const fmtDate = (iso) => {
 
 /** Indian-format rupee/number, rounded to whole. */
 export const fmtNum = (n) => Math.round(Number(n) || 0).toLocaleString('en-IN')
+
+/**
+ * Canonicalise a product name so the SAME physical product always matches as one
+ * string across apps. The welder app emits curly inch/foot marks (e.g. 17”)
+ * while this app uses straight quotes (17"); without this they'd be treated as
+ * two different products and balances would never net. Folds curly quotes to
+ * straight and collapses whitespace. Case is preserved (names are case-sensitive
+ * across the UNICO apps). Pure, dependency-free.
+ */
+export const normalizeProductName = (s) =>
+  String(s ?? '')
+    .replace(/[“”″]/g, '"')   // “ ” ″  → "
+    .replace(/[‘’′]/g, "'")   // ‘ ’ ′  → '
+    .replace(/\s+/g, ' ')
+    .trim()

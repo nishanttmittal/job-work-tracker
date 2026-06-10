@@ -19,6 +19,7 @@ import { db, paths, ensureSignedIn, reserveChallanNumber, reserveChallanBlock } 
 import { makeNormalizer } from '../../core/schema/field'
 import { makeId } from '../../core/db/repository'
 import { flattenChallans, formatChallanNo } from './logic/challan'
+import { normalizeProductName } from '../../core/utils/format'
 import { challanSchema, incomingSchema } from './schema'
 import { DEFAULT_PARTIES, DEFAULT_PRODUCTS } from './config'
 import { lastUsedStore } from './data'
@@ -126,23 +127,44 @@ export function FirestoreProvider({ children }) {
     remove: (id) => deleteDoc(paths.incomingDoc(id)),
   }
 
+  /**
+   * Canonicalise a draft's line items (normalize product names) and auto-register
+   * any product not yet in the catalogue. Keeps the products registry self-healing
+   * so welder-pushed or newly-typed products always appear in dropdowns AND get
+   * counted in balances (the dashboard pending iterates the registry). Returns the
+   * normalized items to store on the challan.
+   */
+  const ingestProducts = useCallback((items) => {
+    const norm = (items || []).map(it => ({ ...it, product: normalizeProductName(it.product) }))
+    const known = new Set(products)
+    const fresh = [...new Set(norm.map(it => it.product).filter(p => p && !known.has(p)))]
+    if (fresh.length) setProducts([...products, ...fresh])
+    return norm
+  }, [products, setProducts])
+
   /** Create one challan with a server-issued unique number (async). */
   const createChallan = useCallback(async (draft) => {
     const n = await reserveChallanNumber()
     const challanNo = formatChallanNo(n)
     const id = makeId('c')
-    const row = { ...draft, id, challanNo, reconciled: false, reconcileReason: '', createdAt: new Date().toISOString() }
+    const items = ingestProducts(draft.items)
+    const row = { ...draft, items, id, challanNo, reconciled: false, reconcileReason: '', createdAt: new Date().toISOString() }
     await setDoc(paths.challan(id), row)
-    log('CREATE', `${challanNo} · ${draft.direction.toUpperCase()} · ${draft.party} · ${draft.items.length} item(s)`)
+    log('CREATE', `${challanNo} · ${draft.direction.toUpperCase()} · ${draft.party} · ${items.length} item(s)`)
     return row
-  }, [log])
+  }, [log, ingestProducts])
 
   /** Bulk import — reserve a contiguous block of numbers atomically. */
   const importChallans = useCallback(async (drafts) => {
     if (!drafts.length) return 0
-    const start = await reserveChallanBlock(drafts.length)
+    // Canonicalise product names and register any new ones (single merge).
+    const normDrafts = drafts.map(d => ({ ...d, items: (d.items || []).map(it => ({ ...it, product: normalizeProductName(it.product) })) }))
+    const known = new Set(products)
+    const fresh = [...new Set(normDrafts.flatMap(d => d.items.map(it => it.product)).filter(p => p && !known.has(p)))]
+    if (fresh.length) setProducts([...products, ...fresh])
+    const start = await reserveChallanBlock(normDrafts.length)
     const batch = writeBatch(db)
-    drafts.forEach((d, i) => {
+    normDrafts.forEach((d, i) => {
       const id = makeId('c')
       batch.set(paths.challan(id), {
         ...d, id, challanNo: formatChallanNo(start + i),
@@ -150,9 +172,9 @@ export function FirestoreProvider({ children }) {
       })
     })
     await batch.commit()
-    log('IMPORT', `Imported ${drafts.length} challans${drafts[0] ? ' for ' + drafts[0].party : ''}`, 'admin')
-    return drafts.length
-  }, [log])
+    log('IMPORT', `Imported ${normDrafts.length} challans${normDrafts[0] ? ' for ' + normDrafts[0].party : ''}`, 'admin')
+    return normDrafts.length
+  }, [log, products, setProducts])
 
   const peekNextChallanNo = useCallback(() => formatChallanNo((counter || 0) + 1), [counter])
 
