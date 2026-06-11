@@ -172,7 +172,7 @@ export default function NewEntry() {
                       options={['', ...products].map(p => ({ value: p, label: p || 'Select product…' }))}
                       className={`${sel} flex-1 min-w-0 !text-lg`} />
                     <NumberInput value={it.quantity} placeholder="Qty" onChange={e => setItem(i, 'quantity', e.target.value)}
-                      className="!w-16 flex-shrink-0 text-center !py-3 !text-sm" />
+                      className="!w-20 !px-2 flex-shrink-0 text-center !py-3" />
                     {items.length > 1 && (
                       <button onClick={() => removeItem(i)} className="w-10 h-10 rounded-xl bg-red-50 text-red-500 text-xl font-bold flex-shrink-0">×</button>
                     )}
