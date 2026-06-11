@@ -5,14 +5,18 @@
 import { OUT_REMINDER_DAYS } from '../config'
 
 /**
- * Complete value universe for a field: the registered list UNION every value
- * that actually appears in the movements. Guards against silently dropping a
- * party/product that exists on a challan (e.g. pushed from the welder app) but
- * was never added to the registered catalogue.
+ * Product universe: the given product list UNION every product that actually
+ * appears in the movements — so a product on a challan that was never added to
+ * the registered catalogue (e.g. pushed from the welder app) is still counted.
+ *
+ * NOTE: only products are unioned, NOT parties. Callers pass the exact party
+ * list they want shown (the dashboard's party filter passes a single party), so
+ * unioning parties here would silently override that filter. The caller is
+ * responsible for the party set it wants (registry ∪ movements when showing all).
  */
-function universe(list, moves, key) {
-  const set = new Set(list || [])
-  for (const m of moves) if (m[key]) set.add(m[key])
+function productUniverse(products, moves) {
+  const set = new Set(products || [])
+  for (const m of moves) if (m.product) set.add(m.product)
   return [...set]
 }
 
@@ -31,8 +35,8 @@ export function calcBalance(moves, party, product, asOfDate = null) {
 /** (party,product) pairs where IN exceeds OUT — red-flag alerts. */
 export function findRedFlags(moves, parties, products) {
   const flags = []
-  for (const party of universe(parties, moves, 'party')) {
-    for (const product of universe(products, moves, 'product')) {
+  for (const party of parties) {
+    for (const product of productUniverse(products, moves)) {
       const { out, in: inn } = calcBalance(moves, party, product)
       if (inn > out && (out > 0 || inn > 0)) flags.push({ party, product, out, in: inn, excess: inn - out })
     }
@@ -42,7 +46,7 @@ export function findRedFlags(moves, parties, products) {
 
 /** Per-product balance rows for one party (only products with activity). */
 export function partyBalances(moves, party, products, asOfDate = null) {
-  return universe(products, moves, 'product')
+  return productUniverse(products, moves)
     .map(product => ({ product, ...calcBalance(moves, party, product, asOfDate) }))
     .filter(d => d.out > 0 || d.in > 0)
 }
@@ -55,7 +59,7 @@ export function partyBalances(moves, party, products, asOfDate = null) {
  * @returns {Array<{party, pending, items, breakdown:Array<{product,balance}>}>}
  */
 export function partyWisePending(moves, parties, products) {
-  return universe(parties, moves, 'party').map(party => {
+  return parties.map(party => {
     const rows = partyBalances(moves, party, products)
     const breakdown = rows
       .filter(r => r.balance !== 0)
@@ -74,8 +78,8 @@ export function partyWisePending(moves, parties, products) {
 export function findAgingOut(moves, parties, products, days = OUT_REMINDER_DAYS) {
   const today = new Date()
   const out = []
-  for (const party of universe(parties, moves, 'party')) {
-    for (const product of universe(products, moves, 'product')) {
+  for (const party of parties) {
+    for (const product of productUniverse(products, moves)) {
       const { balance } = calcBalance(moves, party, product)
       if (balance <= 0) continue
       // oldest OUT date for this pair

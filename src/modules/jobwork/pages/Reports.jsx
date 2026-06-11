@@ -5,12 +5,13 @@
  * Pending, so Pending here matches the dashboard.
  */
 import { useState } from 'react'
-import { fmtDate } from '../../../core/utils/format'
+import { fmtDate, daysAgoStr } from '../../../core/utils/format'
 import { useJobWork } from '../JobWorkContext'
 import { filterMoves, EMPTY_FILTER } from '../logic/filters'
 import FilterBar from '../components/FilterBar'
 
 const sum = (arr, f) => arr.reduce((s, x) => s + f(x), 0)
+const MANAGER_WINDOW_DAYS = 60   // managers see the last ~2 months
 
 /** Aggregate sent/received/pending grouped by a key function. */
 function aggregate(moves, keyFn) {
@@ -31,10 +32,12 @@ function aggregate(moves, keyFn) {
   return [...map.values()]
 }
 
-export default function Reports() {
+export default function Reports({ owner }) {
   const { moves: allMoves, parties, products } = useJobWork()
   const [mode, setMode] = useState('party')
-  const [filter, setFilter] = useState(EMPTY_FILTER)
+  // Admin: full range, editable. Manager: locked to the last 2 months.
+  const [filter, setFilter] = useState(
+    owner ? EMPTY_FILTER : { party: 'all', product: 'all', from: daysAgoStr(MANAGER_WINDOW_DAYS), to: '' })
   const moves = filterMoves(allMoves, filter)
 
   const totalSent = sum(moves.filter(m => m.direction === 'out' && !m.setoff), m => m.quantity)
@@ -72,7 +75,12 @@ export default function Reports() {
       </div>
 
       <div className="max-w-2xl mx-auto p-4 space-y-4">
-        <FilterBar parties={parties} products={products} value={filter} onChange={setFilter} />
+        <FilterBar parties={parties} products={products} value={filter} onChange={setFilter} lockDates={!owner} />
+        {!owner && (
+          <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-2.5 text-xs text-indigo-700 font-medium">
+            Showing the last 2 months.
+          </div>
+        )}
 
         {/* Totals strip */}
         <div className="grid grid-cols-3 gap-3">

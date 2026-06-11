@@ -1,25 +1,25 @@
 /**
- * Dashboard — party-wise pending summary, 7-day aging reminders, red-flag
- * alerts (IN > OUT) and per-party product balances.
+ * Dashboard — party-wise pending summary, red-flag alerts (IN > OUT),
+ * reconciliations and recent challans. Party filter narrows the whole view.
  */
 import { useState } from 'react'
 import { fmtDate } from '../../../core/utils/format'
 import { useJobWork } from '../JobWorkContext'
-import { findRedFlags, partyWisePending, findAgingOut } from '../logic/balance'
-import { OUT_REMINDER_DAYS } from '../config'
+import { findRedFlags, partyWisePending } from '../logic/balance'
 
 export default function Dashboard() {
   const { moves, challans, parties, products } = useJobWork()
   const [view, setView] = useState('all')
 
-  // The View filter applies to the WHOLE dashboard — summary, alerts,
-  // reminders, reconciliations, recent and the detail tables all respect it.
-  const viewParties = view === 'all' ? parties : [view]
+  // Party universe = registered parties ∪ any party present in movements, so the
+  // filter lists everyone (even an unregistered party) and selecting one narrows
+  // the WHOLE dashboard (summary, alerts, recent, reconciliations).
+  const allParties = [...new Set([...parties, ...moves.map(m => m.party)])].filter(Boolean)
+  const viewParties = view === 'all' ? allParties : [view]
   const inView = (party) => view === 'all' || party === view
 
   const summary = partyWisePending(moves, viewParties, products)
   const flags = findRedFlags(moves, viewParties, products)
-  const aging = findAgingOut(moves, viewParties, products, OUT_REMINDER_DAYS)
   const recent = [...challans.list]
     .filter(c => inView(c.party))
     .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).slice(0, 5)
@@ -31,7 +31,7 @@ export default function Dashboard() {
       <div className="bg-white border-b border-slate-200 px-4 py-3 no-print">
         <div className="max-w-2xl mx-auto flex items-center gap-3 flex-wrap">
           <span className="text-sm font-semibold text-slate-600">View:</span>
-          {['all', ...parties].map(p => (
+          {['all', ...allParties].map(p => (
             <button key={p} onClick={() => setView(p)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${view === p ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600'}`}>
               {p === 'all' ? 'All Parties' : p}
@@ -84,27 +84,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* 7-day aging reminder */}
-        {aging.length > 0 && (
-          <div className="bg-orange-50 border-2 border-orange-300 rounded-2xl overflow-hidden">
-            <div className="bg-orange-500 text-white px-4 py-3 flex items-center gap-2">
-              <span className="text-lg">⏰</span><span className="font-bold">Pending Over {OUT_REMINDER_DAYS} Days ({aging.length})</span>
-            </div>
-            <div className="divide-y divide-orange-100">
-              {aging.map((a, i) => (
-                <div key={i} className="px-4 py-3 flex items-center justify-between">
-                  <div><span className="font-semibold text-orange-800 text-sm">{a.party}</span>
-                    <span className="text-orange-400 mx-1.5">·</span><span className="text-orange-700 text-sm">{a.product}</span></div>
-                  <div className="text-right">
-                    <div className="text-orange-700 font-bold text-sm">{a.pending} pcs pending</div>
-                    <div className="text-xs text-orange-400">{a.ageDays} days</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Red flags */}
         {flags.length > 0 && (
           <div className="bg-red-50 border-2 border-red-300 rounded-2xl overflow-hidden">
@@ -126,7 +105,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {flags.length === 0 && aging.length === 0 && (
+        {flags.length === 0 && (
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-center gap-2">
             <span className="text-emerald-600 text-lg">✓</span>
             <span className="text-emerald-700 text-sm font-medium">No alerts — all balances are normal</span>

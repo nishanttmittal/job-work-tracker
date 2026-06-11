@@ -63,7 +63,7 @@ export const jobworkModule = {
     { key: 'matching',  title: 'Matching',        desc: 'Challan-to-challan FIFO matching',        icon: '🔗', color: 'from-teal-600 to-teal-700',     roles: ['manager', 'owner'], Component: Matching },
     { key: 'modify',    title: 'Modify Challans', desc: 'Search & edit recent challans',           icon: '✏️', color: 'from-amber-500 to-amber-600',     roles: ['manager', 'owner'], Component: ModifyEntry },
     { key: 'export',    title: 'Export / Share',  desc: 'Share PDF report on WhatsApp',            icon: '📄', color: 'from-violet-600 to-violet-700',   roles: ['manager', 'owner'], Component: Export },
-    { key: 'reports',   title: 'Reports',         desc: 'Date / party / material totals',          icon: '📈', color: 'from-indigo-600 to-indigo-700',   roles: ['owner'], Component: Reports },
+    { key: 'reports',   title: 'Reports',         desc: 'Date / party / material totals',          icon: '📈', color: 'from-indigo-600 to-indigo-700',   roles: ['manager', 'owner'], Component: Reports },
     { key: 'admin',     title: 'Admin',           desc: 'Reconcile, set-off, import, users, backup', icon: '⚙️', color: 'from-slate-600 to-slate-700',   roles: ['owner'], Component: Admin },
   ],
 }
