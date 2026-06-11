@@ -15,6 +15,7 @@ export default function Export() {
   const [type, setType] = useState('datewise')
   const [party, setParty] = useState('all')
   const [product, setProduct] = useState('all')
+  const [direction, setDirection] = useState('both')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState(todayStr())
   const [asOf, setAsOf] = useState(todayStr())
@@ -25,7 +26,7 @@ export default function Export() {
     setBusy(true)
     try {
       const doc = type === 'datewise'
-        ? buildDateWisePdf(moves, party, from, to, product)
+        ? buildDateWisePdf(moves, { party, product, from, to, direction })
         : buildBalancePdf(moves, party, products, asOf)
       const safeParty = party === 'all' ? 'all-parties' : party
       const name = `${safeParty}-${type === 'datewise' ? 'transactions' : 'balance'}-${todayStr()}.pdf`
@@ -62,6 +63,16 @@ export default function Export() {
             <div><span className="text-sm font-bold text-slate-500 uppercase tracking-wide">Material</span>
               <Select value={product} onChange={e => setProduct(e.target.value)} className="mt-2"
                 options={[{ value: 'all', label: 'All Materials' }, ...products.map(p => ({ value: p, label: p }))]} /></div>
+          )}
+          {type === 'datewise' && (
+            <div><span className="text-sm font-bold text-slate-500 uppercase tracking-wide">Direction</span>
+              <div className="mt-2 grid grid-cols-3 gap-1.5">
+                {[['out', '↗ OUT'], ['in', '↙ IN'], ['both', 'Both']].map(([k, l]) => (
+                  <button key={k} onClick={() => setDirection(k)}
+                    className={`py-2 rounded-xl text-sm font-bold ${direction === k ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{l}</button>
+                ))}
+              </div>
+            </div>
           )}
           {type === 'datewise' ? (
             <div className="grid grid-cols-2 gap-3">

@@ -21,33 +21,48 @@ function header(doc, title, party, sub) {
   doc.text(sub, 40, 92)
 }
 
+const DIR_LABEL = { out: 'Sent (OUT)', in: 'Received (IN)', both: 'All Movements (IN + OUT)' }
+
 /**
- * Build a date-wise transactions PDF — every entry, date-wise, with OUT and IN
- * in two separate columns. Filterable by party / product / date range.
- * `party` and `product` may be 'all'.
+ * Build a date-wise PIVOT PDF: one COLUMN per product, one ROW per date, cells =
+ * pieces. A TOTAL row at the bottom sums each product across all dates (+ grand
+ * total), and a Total column sums each date across products. Filterable by
+ * party / product / date range and direction ('out' | 'in' | 'both').
  */
-export function buildDateWisePdf(moves, party, from, to, product = 'all') {
+export function buildDateWisePdf(moves, { party = 'all', product = 'all', from = '', to = '', direction = 'both' } = {}) {
   const rows = moves
     .filter(m => party === 'all' || m.party === party)
     .filter(m => product === 'all' || m.product === product)
     .filter(m => (!from || m.date >= from) && (!to || m.date <= to))
-    .sort((a, b) => a.date.localeCompare(b.date) || (a.challanNo || '').localeCompare(b.challanNo || ''))
-  const totalOut = rows.reduce((s, m) => s + (m.direction === 'out' ? m.quantity : 0), 0)
-  const totalIn = rows.reduce((s, m) => s + (m.direction === 'in' ? m.quantity : 0), 0)
-  const doc = new jsPDF('p', 'pt', 'a4')
-  header(doc, 'Date-wise Transaction Report', `${party === 'all' ? 'All Parties' : party}${product === 'all' ? '' : ` · ${product}`}`,
+    .filter(m => direction === 'both' || m.direction === direction)
+
+  const dates = [...new Set(rows.map(m => m.date))].sort()
+  const cols = [...new Set(rows.map(m => m.product))].sort()
+  const cell = {}            // cell[date][product] = pcs
+  for (const m of rows) {
+    (cell[m.date] = cell[m.date] || {})[m.product] = (cell[m.date]?.[m.product] || 0) + m.quantity
+  }
+  const colTotal = (p) => rows.reduce((s, m) => s + (m.product === p ? m.quantity : 0), 0)
+  const grand = rows.reduce((s, m) => s + m.quantity, 0)
+
+  // Many products → landscape so the columns fit.
+  const doc = new jsPDF(cols.length > 6 ? 'l' : 'p', 'pt', 'a4')
+  header(doc, `Date-wise Report — ${DIR_LABEL[direction]}`,
+    `${party === 'all' ? 'All Parties' : party}${product === 'all' ? '' : ` · ${product}`}`,
     `Period: ${from ? fmtDate(from) : 'Beginning'} to ${fmtDate(to)} · Generated ${fmtDate(todayStr())}`)
   autoTable(doc, {
     startY: 108,
-    head: [['Date', 'Challan', 'Party', 'Product', 'OUT', 'IN', 'Gaadi']],
-    body: rows.map(m => [
-      fmtDate(m.date), m.challanNo, m.party, m.product,
-      m.direction === 'out' ? m.quantity : '', m.direction === 'in' ? m.quantity : '', m.gaadi || '—',
-    ]),
-    foot: [['TOTAL', '', '', '', totalOut, totalIn, '']],
+    head: [['Date', ...cols, 'Total']],
+    body: dates.map(d => {
+      const vals = cols.map(p => cell[d]?.[p] || 0)
+      const rowTotal = vals.reduce((s, v) => s + v, 0)
+      return [fmtDate(d), ...vals.map(v => v || ''), rowTotal]
+    }),
+    foot: [['TOTAL', ...cols.map(p => colTotal(p)), grand]],
     headStyles: { fillColor: PURPLE },
-    footStyles: { fillColor: [237, 233, 254], textColor: 20 },
-    styles: { fontSize: 8 },
+    footStyles: { fillColor: [237, 233, 254], textColor: 20, fontStyle: 'bold' },
+    styles: { fontSize: cols.length > 8 ? 7 : 9, halign: 'center' },
+    columnStyles: { 0: { halign: 'left' } },
   })
   return doc
 }
