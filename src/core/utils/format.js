@@ -10,6 +10,13 @@ export const MONTHS = [
 /** ISO yyyy-mm-dd for today (local). */
 export const todayStr = () => new Date().toISOString().slice(0, 10)
 
+/** ISO yyyy-mm-dd for N days ago. */
+export const daysAgoStr = (n) => {
+  const d = new Date()
+  d.setDate(d.getDate() - n)
+  return d.toISOString().slice(0, 10)
+}
+
 /** ISO yyyy-mm-dd from day/month/year numbers. */
 export const toISODate = (d, m, y) =>
   `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`

@@ -10,7 +10,7 @@
  * before an older one. Overrides persist and are logged.
  */
 import { useState } from 'react'
-import { fmtDate } from '../../../core/utils/format'
+import { fmtDate, daysAgoStr } from '../../../core/utils/format'
 import { useJobWork } from '../JobWorkContext'
 import { matchFIFO, matchablePairs } from '../logic/matching'
 import { EMPTY_FILTER } from '../logic/filters'
@@ -19,9 +19,14 @@ import FilterBar from '../components/FilterBar'
 const byDate = (a, b) =>
   (a.date || '').localeCompare(b.date || '') || (a.challanNo || '').localeCompare(b.challanNo || '')
 
+const MANAGER_WINDOW_DAYS = 15
+
 export default function Matching({ owner }) {
   const { moves, parties, products, matchLinks = [], setMatchLinks, log } = useJobWork()
-  const [filter, setFilter] = useState(EMPTY_FILTER)
+  // Managers get a read-only view limited to the last 15 days (date range locked);
+  // admins get the full range with editable filters.
+  const [filter, setFilter] = useState(
+    owner ? EMPTY_FILTER : { party: 'all', product: 'all', from: daysAgoStr(MANAGER_WINDOW_DAYS), to: '' })
   const inRange = (d) => (!filter.from || d >= filter.from) && (!filter.to || d <= filter.to)
 
   // Matching is computed on FULL data (so balances stay correct); the filter
@@ -45,11 +50,13 @@ export default function Matching({ owner }) {
   return (
     <div className="min-h-screen bg-slate-50 pb-8">
       <div className="max-w-2xl mx-auto p-4 space-y-4">
-        <FilterBar parties={parties} products={products} value={filter} onChange={setFilter} />
+        <FilterBar parties={parties} products={products} value={filter} onChange={setFilter} lockDates={!owner} />
 
         <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-800">
           Each OUT challan is auto-matched (oldest first) against the returns received. Green = fully returned, amber = still open.
-          {owner && <span className="block mt-1 text-blue-600">Admin: use “Re-link” to pin a return to a specific OUT challan.</span>}
+          {owner
+            ? <span className="block mt-1 text-blue-600">Admin: use “Re-link” to pin a return to a specific OUT challan.</span>
+            : <span className="block mt-1 text-blue-600">Showing the last {MANAGER_WINDOW_DAYS} days.</span>}
         </div>
 
         {Object.keys(byParty).length === 0 && (

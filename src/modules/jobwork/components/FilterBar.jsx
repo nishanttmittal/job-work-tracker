@@ -4,7 +4,7 @@
  */
 import { Select, DateInput } from '../../../core/ui'
 
-export default function FilterBar({ parties, products, value, onChange }) {
+export default function FilterBar({ parties, products, value, onChange, lockDates = false }) {
   const set = (k, v) => onChange({ ...value, [k]: v })
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3 no-print">
@@ -20,10 +20,12 @@ export default function FilterBar({ parties, products, value, onChange }) {
             options={[{ value: 'all', label: 'All Materials' }, ...products.map(p => ({ value: p, label: p }))]} />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div><span className="text-xs text-slate-500 block mb-1">From</span><DateInput value={value.from} onChange={e => set('from', e.target.value)} /></div>
-        <div><span className="text-xs text-slate-500 block mb-1">To</span><DateInput value={value.to} onChange={e => set('to', e.target.value)} /></div>
-      </div>
+      {!lockDates && (
+        <div className="grid grid-cols-2 gap-3">
+          <div><span className="text-xs text-slate-500 block mb-1">From</span><DateInput value={value.from} onChange={e => set('from', e.target.value)} /></div>
+          <div><span className="text-xs text-slate-500 block mb-1">To</span><DateInput value={value.to} onChange={e => set('to', e.target.value)} /></div>
+        </div>
+      )}
     </div>
   )
 }
