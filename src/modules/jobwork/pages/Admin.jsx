@@ -150,28 +150,29 @@ function Reconcile({ challans, parties, products, log, toast }) {
   )
 }
 
-/* ── Set-off: admin adjustment that clears a leftover short/excess ────────── */
+/* ── Set-off: admin adjustment — post an IN or OUT movement to fix a balance ── */
 function SetOff({ parties, products, moves, createChallan, log, toast }) {
   const [party, setParty] = useState(parties[0] || '')
   const [product, setProduct] = useState(products[0] || '')
   const [qty, setQty] = useState('')
   const [reason, setReason] = useState('')
+  const [dirOverride, setDirOverride] = useState('')   // '' = auto from balance
   const [busy, setBusy] = useState(false)
 
   // Live balance for the selected party+product (out − in, incl. prior set-offs).
   const balance = moves.reduce((s, m) =>
     m.party === party && m.product === product ? s + (m.direction === 'out' ? m.quantity : -m.quantity) : s, 0)
   const pending = balance > 0, excess = balance < 0
-  const direction = pending ? 'in' : 'out'   // post the opposite movement to clear
   const max = Math.abs(balance)
   const amount = Number(qty) || 0
+  // Default direction clears the imbalance (pending → post IN, excess → post OUT).
+  const direction = dirOverride || (excess ? 'out' : 'in')
+  const projected = balance + (direction === 'out' ? amount : -amount)
 
   const apply = async () => {
     if (busy) return
     if (!party || !product) return toast.show('Pick party & product')
-    if (balance === 0) return toast.show('Nothing to set off — balance is clear')
     if (!(amount > 0)) return toast.show('Enter a quantity')
-    if (amount > max) return toast.show(`Cannot exceed the ${max} pcs ${pending ? 'pending' : 'excess'}`)
     if (!reason.trim()) return toast.show('Reason is required')
     setBusy(true)
     try {
@@ -181,17 +182,24 @@ function SetOff({ parties, products, moves, createChallan, log, toast }) {
         setoff: true, reconciled: true, reconcileReason: reason.trim(),
       })
       log('SETOFF', `${party} · ${product} · ${amount} (${direction.toUpperCase()}) → ${c.challanNo} — ${reason.trim()}`, 'admin')
-      toast.show(`Set off ${amount} pcs → ${c.challanNo}`)
-      setQty(''); setReason('')
+      toast.show(`Set off ${amount} pcs (${direction.toUpperCase()}) → ${c.challanNo}`)
+      setQty(''); setReason(''); setDirOverride('')
     } catch {
       toast.show('⚠ Could not set off — check internet & retry', 3500)
     } finally { setBusy(false) }
   }
 
+  const dirBtn = (d, label) => (
+    <button onClick={() => setDirOverride(d)}
+      className={`flex-1 py-2.5 rounded-xl text-sm font-bold ${direction === d
+        ? (d === 'in' ? 'bg-emerald-600 text-white' : 'bg-blue-600 text-white')
+        : 'bg-slate-100 text-slate-500'}`}>{label}</button>
+  )
+
   return (
     <div className="space-y-3">
       <div className="bg-violet-50 border border-violet-200 rounded-xl px-4 py-3 text-sm text-violet-700">
-        Clear a leftover <b>pending</b> or <b>excess</b> balance with an adjustment. It posts a tracked set-off movement (excluded from real sent/received totals) and is recorded in the audit log. Reason is mandatory.
+        Post an adjustment to fix a balance — <b>Post IN</b> (clears pending / records a return) or <b>Post OUT</b> (clears excess / records extra sent). It's a tracked set-off movement (excluded from real sent/received totals) and is logged. Reason is mandatory.
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
@@ -211,24 +219,35 @@ function SetOff({ parties, products, moves, createChallan, log, toast }) {
           {pending ? `${max} pcs pending` : excess ? `${max} pcs excess (IN > OUT)` : '✓ Balance is clear'}
         </div>
 
-        {balance !== 0 && (
-          <>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-slate-500 flex-1">Set off (post {direction.toUpperCase()})</span>
-              <input type="number" inputMode="numeric" value={qty} placeholder={String(max)}
-                onChange={e => setQty(e.target.value)}
-                className="w-28 border-2 border-slate-300 rounded-xl px-3 py-2 text-base font-semibold text-center" />
-              <button onClick={() => setQty(String(max))} className="text-xs font-bold text-violet-600 px-2">All</button>
-            </div>
-            <input type="text" value={reason} placeholder="Reason (required) — e.g. scrapped at plater"
-              onChange={e => setReason(e.target.value)}
-              className="w-full border-2 border-slate-300 rounded-xl px-3 py-2 text-sm" />
-            <button disabled={busy} onClick={apply}
-              className="w-full bg-violet-600 text-white rounded-xl py-3 font-bold text-sm disabled:opacity-50">
-              {busy ? 'Setting off…' : `Set off ${amount > 0 ? amount + ' pcs' : ''}`}
-            </button>
-          </>
+        <div className="flex gap-2">
+          {dirBtn('in', '↙ Post IN')}
+          {dirBtn('out', '↗ Post OUT')}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-slate-500 flex-1">Quantity</span>
+          <input type="number" inputMode="numeric" value={qty} placeholder={max ? String(max) : '0'}
+            onChange={e => setQty(e.target.value)}
+            className="w-28 border-2 border-slate-300 rounded-xl px-3 py-2 text-base font-semibold text-center" />
+          {max > 0 && <button onClick={() => setQty(String(max))} className="text-xs font-bold text-violet-600 px-2">All</button>}
+        </div>
+
+        {amount > 0 && (
+          <div className="text-xs text-center text-slate-500">
+            Balance after set-off:{' '}
+            <span className={`font-bold ${projected > 0 ? 'text-amber-600' : projected < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+              {projected > 0 ? `${projected} pending` : projected < 0 ? `${Math.abs(projected)} excess` : 'Clear'}
+            </span>
+          </div>
         )}
+
+        <input type="text" value={reason} placeholder="Reason (required) — e.g. scrapped at plater"
+          onChange={e => setReason(e.target.value)}
+          className="w-full border-2 border-slate-300 rounded-xl px-3 py-2 text-sm" />
+        <button disabled={busy} onClick={apply}
+          className="w-full bg-violet-600 text-white rounded-xl py-3 font-bold text-sm disabled:opacity-50">
+          {busy ? 'Setting off…' : `Set off ${amount > 0 ? amount + ' pcs ' : ''}(${direction.toUpperCase()})`}
+        </button>
       </div>
     </div>
   )

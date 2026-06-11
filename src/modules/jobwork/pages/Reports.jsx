@@ -7,6 +7,8 @@
 import { useState } from 'react'
 import { fmtDate } from '../../../core/utils/format'
 import { useJobWork } from '../JobWorkContext'
+import { filterMoves, EMPTY_FILTER } from '../logic/filters'
+import FilterBar from '../components/FilterBar'
 
 const sum = (arr, f) => arr.reduce((s, x) => s + f(x), 0)
 
@@ -30,8 +32,10 @@ function aggregate(moves, keyFn) {
 }
 
 export default function Reports() {
-  const { moves } = useJobWork()
+  const { moves: allMoves, parties, products } = useJobWork()
   const [mode, setMode] = useState('party')
+  const [filter, setFilter] = useState(EMPTY_FILTER)
+  const moves = filterMoves(allMoves, filter)
 
   const totalSent = sum(moves.filter(m => m.direction === 'out' && !m.setoff), m => m.quantity)
   const totalRecv = sum(moves.filter(m => m.direction === 'in' && !m.setoff), m => m.quantity)
@@ -68,6 +72,8 @@ export default function Reports() {
       </div>
 
       <div className="max-w-2xl mx-auto p-4 space-y-4">
+        <FilterBar parties={parties} products={products} value={filter} onChange={setFilter} />
+
         {/* Totals strip */}
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-white rounded-2xl border border-slate-200 p-4 text-center">

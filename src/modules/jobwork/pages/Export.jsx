@@ -13,19 +13,22 @@ export default function Export() {
   const { moves, parties, products } = useJobWork()
   const toast = useToast()
   const [type, setType] = useState('datewise')
-  const [party, setParty] = useState(parties[0] || '')
+  const [party, setParty] = useState('all')
+  const [product, setProduct] = useState('all')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState(todayStr())
   const [asOf, setAsOf] = useState(todayStr())
   const [busy, setBusy] = useState(false)
 
   const generate = async () => {
+    if (type === 'balance' && party === 'all') return toast.show('Pick a party for the balance report')
     setBusy(true)
     try {
       const doc = type === 'datewise'
-        ? buildDateWisePdf(moves, party, from, to)
+        ? buildDateWisePdf(moves, party, from, to, product)
         : buildBalancePdf(moves, party, products, asOf)
-      const name = `${party}-${type === 'datewise' ? 'transactions' : 'balance'}-${todayStr()}.pdf`
+      const safeParty = party === 'all' ? 'all-parties' : party
+      const name = `${safeParty}-${type === 'datewise' ? 'transactions' : 'balance'}-${todayStr()}.pdf`
       const result = await sharePdf(doc, name)
       toast.show(result === 'shared' ? 'Shared!' : result === 'downloaded' ? 'PDF downloaded' : 'Cancelled')
     } finally { setBusy(false) }
@@ -53,7 +56,13 @@ export default function Export() {
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-4">
           <div><span className="text-sm font-bold text-slate-500 uppercase tracking-wide">Party</span>
-            <Select value={party} onChange={e => setParty(e.target.value)} options={parties} className="mt-2" /></div>
+            <Select value={party} onChange={e => setParty(e.target.value)} className="mt-2"
+              options={[{ value: 'all', label: 'All Parties' }, ...parties.map(p => ({ value: p, label: p }))]} /></div>
+          {type === 'datewise' && (
+            <div><span className="text-sm font-bold text-slate-500 uppercase tracking-wide">Material</span>
+              <Select value={product} onChange={e => setProduct(e.target.value)} className="mt-2"
+                options={[{ value: 'all', label: 'All Materials' }, ...products.map(p => ({ value: p, label: p }))]} /></div>
+          )}
           {type === 'datewise' ? (
             <div className="grid grid-cols-2 gap-3">
               <div><span className="text-xs text-slate-500 block mb-1">From</span><DateInput value={from} onChange={e => setFrom(e.target.value)} /></div>

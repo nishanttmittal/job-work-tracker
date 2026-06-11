@@ -6,7 +6,7 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { fmtDate, todayStr } from '../../../core/utils/format'
-import { calcBalance, partyBalances } from './balance'
+import { partyBalances } from './balance'
 import { APP_TITLE } from '../config'
 
 const PURPLE = [109, 40, 217]
@@ -21,21 +21,33 @@ function header(doc, title, party, sub) {
   doc.text(sub, 40, 92)
 }
 
-/** Build a date-wise transactions PDF (one row per challan line item). */
-export function buildDateWisePdf(moves, party, from, to) {
+/**
+ * Build a date-wise transactions PDF — every entry, date-wise, with OUT and IN
+ * in two separate columns. Filterable by party / product / date range.
+ * `party` and `product` may be 'all'.
+ */
+export function buildDateWisePdf(moves, party, from, to, product = 'all') {
   const rows = moves
-    .filter(m => m.party === party)
+    .filter(m => party === 'all' || m.party === party)
+    .filter(m => product === 'all' || m.product === product)
     .filter(m => (!from || m.date >= from) && (!to || m.date <= to))
-    .sort((a, b) => a.date.localeCompare(b.date))
+    .sort((a, b) => a.date.localeCompare(b.date) || (a.challanNo || '').localeCompare(b.challanNo || ''))
+  const totalOut = rows.reduce((s, m) => s + (m.direction === 'out' ? m.quantity : 0), 0)
+  const totalIn = rows.reduce((s, m) => s + (m.direction === 'in' ? m.quantity : 0), 0)
   const doc = new jsPDF('p', 'pt', 'a4')
-  header(doc, 'Date-wise Transaction Report', party,
+  header(doc, 'Date-wise Transaction Report', `${party === 'all' ? 'All Parties' : party}${product === 'all' ? '' : ` · ${product}`}`,
     `Period: ${from ? fmtDate(from) : 'Beginning'} to ${fmtDate(to)} · Generated ${fmtDate(todayStr())}`)
   autoTable(doc, {
     startY: 108,
-    head: [['Challan', 'Date', 'Product', 'Dir', 'Qty', 'Gaadi']],
-    body: rows.map(m => [m.challanNo, fmtDate(m.date), m.product, m.direction.toUpperCase(), m.quantity, m.gaadi || '—']),
+    head: [['Date', 'Challan', 'Party', 'Product', 'OUT', 'IN', 'Gaadi']],
+    body: rows.map(m => [
+      fmtDate(m.date), m.challanNo, m.party, m.product,
+      m.direction === 'out' ? m.quantity : '', m.direction === 'in' ? m.quantity : '', m.gaadi || '—',
+    ]),
+    foot: [['TOTAL', '', '', '', totalOut, totalIn, '']],
     headStyles: { fillColor: PURPLE },
-    styles: { fontSize: 9 },
+    footStyles: { fillColor: [237, 233, 254], textColor: 20 },
+    styles: { fontSize: 8 },
   })
   return doc
 }

@@ -13,15 +13,22 @@ import { useState } from 'react'
 import { fmtDate } from '../../../core/utils/format'
 import { useJobWork } from '../JobWorkContext'
 import { matchFIFO, matchablePairs } from '../logic/matching'
+import { EMPTY_FILTER } from '../logic/filters'
+import FilterBar from '../components/FilterBar'
 
 const byDate = (a, b) =>
   (a.date || '').localeCompare(b.date || '') || (a.challanNo || '').localeCompare(b.challanNo || '')
 
 export default function Matching({ owner }) {
-  const { moves, parties, matchLinks = [], setMatchLinks, log } = useJobWork()
-  const [view, setView] = useState('all')
+  const { moves, parties, products, matchLinks = [], setMatchLinks, log } = useJobWork()
+  const [filter, setFilter] = useState(EMPTY_FILTER)
+  const inRange = (d) => (!filter.from || d >= filter.from) && (!filter.to || d <= filter.to)
 
-  const pairs = matchablePairs(moves).filter(p => view === 'all' || p.party === view)
+  // Matching is computed on FULL data (so balances stay correct); the filter
+  // only narrows what's displayed.
+  const pairs = matchablePairs(moves).filter(p =>
+    (filter.party === 'all' || p.party === filter.party) &&
+    (filter.product === 'all' || p.product === filter.product))
   const byParty = {}
   for (const p of pairs) (byParty[p.party] = byParty[p.party] || []).push(p.product)
 
@@ -37,20 +44,9 @@ export default function Matching({ owner }) {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-8">
-      {/* Party filter */}
-      <div className="bg-white border-b border-slate-200 px-4 py-3 no-print">
-        <div className="max-w-2xl mx-auto flex items-center gap-3 flex-wrap">
-          <span className="text-sm font-semibold text-slate-600">View:</span>
-          {['all', ...parties].map(p => (
-            <button key={p} onClick={() => setView(p)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${view === p ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600'}`}>
-              {p === 'all' ? 'All Parties' : p}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <div className="max-w-2xl mx-auto p-4 space-y-4">
+        <FilterBar parties={parties} products={products} value={filter} onChange={setFilter} />
+
         <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-800">
           Each OUT challan is auto-matched (oldest first) against the returns received. Green = fully returned, amber = still open.
           {owner && <span className="block mt-1 text-blue-600">Admin: use “Re-link” to pin a return to a specific OUT challan.</span>}
@@ -65,20 +61,24 @@ export default function Matching({ owner }) {
             <div className="bg-slate-700 text-white px-4 py-3 font-bold">{party}</div>
             <div className="divide-y divide-slate-100">
               {prods.map(product => {
-                const { outs, excessIn, openOut } = matchFIFO(moves, party, product, matchLinks)
+                const { outs, excessIn } = matchFIFO(moves, party, product, matchLinks)
+                const shownOuts = outs.filter(o => inRange(o.date))
                 const ins = moves
                   .filter(m => m.party === party && m.product === product && m.direction === 'in')
+                  .filter(m => inRange(m.date))
                   .sort(byDate)
+                if (shownOuts.length === 0 && ins.length === 0) return null
+                const shownOpen = shownOuts.reduce((s, o) => s + o.open, 0)
                 return (
                   <div key={product} className="px-4 py-3">
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-semibold text-slate-700 text-sm">{product}</span>
-                      <span className={`text-xs font-bold ${openOut > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                        {openOut > 0 ? `${openOut} open` : '✓ all returned'}
+                      <span className={`text-xs font-bold ${shownOpen > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                        {shownOpen > 0 ? `${shownOpen} open` : '✓ all returned'}
                       </span>
                     </div>
                     <div className="space-y-2">
-                      {outs.map(o => (
+                      {shownOuts.map(o => (
                         <div key={o.challanNo} className={`rounded-lg border px-3 py-2 ${o.open > 0 ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
                           <div className="flex items-center justify-between text-sm">
                             <span className="font-semibold text-slate-700">
@@ -114,7 +114,7 @@ export default function Matching({ owner }) {
                     </div>
 
                     {/* Admin re-link */}
-                    {owner && ins.length > 0 && outs.length > 0 && (
+                    {owner && ins.length > 0 && shownOuts.length > 0 && (
                       <div className="mt-2.5 pt-2.5 border-t border-slate-100">
                         <div className="text-[11px] font-bold text-slate-400 uppercase mb-1.5">Re-link returns (admin)</div>
                         <div className="space-y-1">
@@ -129,7 +129,7 @@ export default function Matching({ owner }) {
                                 <select value={cur} onChange={e => setLink(party, product, inm.challanNo, e.target.value)}
                                   className={`border rounded px-1.5 py-1 text-xs ${cur ? 'border-indigo-300 text-indigo-700 font-semibold' : 'border-slate-300 text-slate-600'}`}>
                                   <option value="">Auto (FIFO)</option>
-                                  {outs.map(o => <option key={o.challanNo} value={o.challanNo}>{o.challanNo}</option>)}
+                                  {shownOuts.map(o => <option key={o.challanNo} value={o.challanNo}>{o.challanNo}</option>)}
                                 </select>
                               </div>
                             )
