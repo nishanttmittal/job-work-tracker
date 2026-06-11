@@ -380,6 +380,8 @@ function Manage({ challans, logs, parties, setParties, products, setProducts, lo
   const [partyF, setPartyF] = useState('all')
   const [prodF, setProdF] = useState('all')
   const [confirmReset, setConfirmReset] = useState(false)
+  const [lastBackup, setLastBackup] = useState(() => localStorage.getItem('pjw:lastBackup'))
+  const [nowTs] = useState(() => Date.now())
 
   const matchDel = (c) =>
     (!delFrom || c.date >= delFrom) && (!delTo || c.date <= delTo)
@@ -421,6 +423,7 @@ function Manage({ challans, logs, parties, setParties, products, setProducts, lo
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a'); a.href = url; a.download = `platingjobwork-backup-${new Date().toISOString().slice(0,10)}.json`; a.click()
     URL.revokeObjectURL(url)
+    const ts = new Date().toISOString(); localStorage.setItem('pjw:lastBackup', ts); setLastBackup(ts)
     toast.show(`Backup downloaded — ${challans.list.length} challans`)
   }
 
@@ -494,6 +497,17 @@ function Manage({ challans, logs, parties, setParties, products, setProducts, lo
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
         <h3 className="font-bold text-slate-700 text-sm mb-1">Backup & Restore</h3>
         <p className="text-xs text-slate-400 mb-3">Save everything to a file, or restore from a backup</p>
+        {(() => {
+          const days = lastBackup ? Math.floor((nowTs - new Date(lastBackup).getTime()) / 86400000) : null
+          const stale = days === null || days >= 7
+          return (
+            <div className={`rounded-xl px-3 py-2 mb-3 text-xs font-semibold ${stale ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+              {lastBackup
+                ? `Last backup: ${days === 0 ? 'today' : days + ' day' + (days === 1 ? '' : 's') + ' ago'}${stale ? ' — please back up now' : ' ✓'}`
+                : '⚠ No backup yet on this device — please download one now'}
+            </div>
+          )
+        })()}
         <div className="flex gap-2">
           <button onClick={downloadBackup} className="flex-1 bg-emerald-600 text-white rounded-xl py-3 text-sm font-bold">⬇ Download Backup</button>
           <label className="flex-1 bg-blue-600 text-white rounded-xl py-3 text-sm font-bold flex items-center justify-center cursor-pointer">⬆ Restore

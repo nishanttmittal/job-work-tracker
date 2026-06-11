@@ -37,31 +37,47 @@ export function buildDateWisePdf(moves, { party = 'all', product = 'all', from =
     .filter(m => direction === 'both' || m.direction === direction)
 
   const dates = [...new Set(rows.map(m => m.date))].sort()
-  const cols = [...new Set(rows.map(m => m.product))].sort()
-  const cell = {}            // cell[date][product] = pcs
-  for (const m of rows) {
-    (cell[m.date] = cell[m.date] || {})[m.product] = (cell[m.date]?.[m.product] || 0) + m.quantity
+  // With many products, keep the top columns by volume and roll the rest into an
+  // "Others" column so the report stays readable on one page width.
+  const MAX_COLS = 14
+  const allProducts = [...new Set(rows.map(m => m.product))]
+  let cols, othersSet = null
+  if (allProducts.length > MAX_COLS) {
+    const ranked = allProducts
+      .map(p => ({ p, t: rows.reduce((s, m) => s + (m.product === p ? m.quantity : 0), 0) }))
+      .sort((a, b) => b.t - a.t)
+    cols = ranked.slice(0, MAX_COLS - 1).map(x => x.p).sort()
+    othersSet = new Set(ranked.slice(MAX_COLS - 1).map(x => x.p))
+  } else {
+    cols = allProducts.sort()
   }
-  const colTotal = (p) => rows.reduce((s, m) => s + (m.product === p ? m.quantity : 0), 0)
+  const colKey = (p) => (othersSet && othersSet.has(p) ? 'Others' : p)
+  const displayCols = othersSet ? [...cols, 'Others'] : cols
+  const cell = {}            // cell[date][col] = pcs
+  for (const m of rows) {
+    const k = colKey(m.product)
+    ;(cell[m.date] = cell[m.date] || {})[k] = (cell[m.date]?.[k] || 0) + m.quantity
+  }
+  const colTotal = (c) => rows.reduce((s, m) => s + (colKey(m.product) === c ? m.quantity : 0), 0)
   const grand = rows.reduce((s, m) => s + m.quantity, 0)
 
   // Many products → landscape so the columns fit.
-  const doc = new jsPDF(cols.length > 6 ? 'l' : 'p', 'pt', 'a4')
+  const doc = new jsPDF(displayCols.length > 6 ? 'l' : 'p', 'pt', 'a4')
   header(doc, `Date-wise Report — ${DIR_LABEL[direction]}`,
-    `${party === 'all' ? 'All Parties' : party}${product === 'all' ? '' : ` · ${product}`}`,
+    `${party === 'all' ? 'All Parties' : party}${product === 'all' ? '' : ` · ${product}`}${othersSet ? ` · top ${MAX_COLS - 1} products + Others` : ''}`,
     `Period: ${from ? fmtDate(from) : 'Beginning'} to ${fmtDate(to)} · Generated ${fmtDate(todayStr())}`)
   autoTable(doc, {
     startY: 108,
-    head: [['Date', ...cols, 'Total']],
+    head: [['Date', ...displayCols, 'Total']],
     body: dates.map(d => {
-      const vals = cols.map(p => cell[d]?.[p] || 0)
+      const vals = displayCols.map(c => cell[d]?.[c] || 0)
       const rowTotal = vals.reduce((s, v) => s + v, 0)
       return [fmtDate(d), ...vals.map(v => v || ''), rowTotal]
     }),
-    foot: [['TOTAL', ...cols.map(p => colTotal(p)), grand]],
+    foot: [['TOTAL', ...displayCols.map(c => colTotal(c)), grand]],
     headStyles: { fillColor: PURPLE },
     footStyles: { fillColor: [237, 233, 254], textColor: 20, fontStyle: 'bold' },
-    styles: { fontSize: cols.length > 8 ? 7 : 9, halign: 'center' },
+    styles: { fontSize: displayCols.length > 8 ? 7 : 9, halign: 'center' },
     columnStyles: { 0: { halign: 'left' } },
   })
   return doc
