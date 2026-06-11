@@ -41,14 +41,6 @@ export default function AppShell({ moduleId }) {
   const module = getModule(moduleId)
   const { Provider } = module
 
-  // TEMP PREVIEW (remove after review): ?preview=manager|admin renders that role
-  // without the Google sign-in gate so the layout can be checked. Data still
-  // loads via anonymous auth. NOT a security boundary — to be taken down.
-  const preview = new URLSearchParams(window.location.search).get('preview')
-  if (preview === 'manager' || preview === 'admin') {
-    return <Provider><Console module={module} role={preview === 'admin' ? 'owner' : 'manager'} userEmail={`${preview}@preview`} /></Provider>
-  }
-
   // Offline test mode (?local=1): no cloud, no auth — full access for testing.
   if (!isFirebaseConfigured) {
     return <Provider><Console module={module} role="owner" /></Provider>
