@@ -27,8 +27,27 @@ service cloud.firestore {
     function pExists() { return tEmail() != '' && exists(pPath()); }
     function pOwner() { return signedIn() && (bootstrapOwner() || (pExists() && get(pPath()).data.role == 'owner' && get(pPath()).data.active == true)); }
 
+    // ---- history freeze: pre-June 2026 is the verified baseline (mirror of the
+    //      apps' FREEZE_BEFORE). Block creating/back-dating & deleting frozen
+    //      challans/dispatches server-side; updates stay open so the owner's
+    //      in-app Reconcile works (and can't backdate a live doc into the past).
+    //      `date` is a 'YYYY-MM-DD' string, so lexical compare == date compare.
+    function freezeBefore() { return '2026-06-01'; }
+    function notFrozenCreate() { return request.resource.data.date >= freezeBefore(); }
+    function notFrozenDelete() { return resource.data.date >= freezeBefore(); }
+    function updateNotBackdating() {
+      // allow editing a doc that's ALREADY frozen (owner reconcile of history),
+      // but a non-frozen doc may not be moved to a frozen date.
+      return request.resource.data.date >= freezeBefore() || resource.data.date < freezeBefore();
+    }
+
     // ---- Plating Job Work (role-based on users only) ----
-    match /apps/platingjobwork/challans/{id} { allow read, write: if signedIn(); }
+    match /apps/platingjobwork/challans/{id} {
+      allow read:   if signedIn();
+      allow create: if signedIn() && notFrozenCreate();
+      allow update: if signedIn() && updateNotBackdating();
+      allow delete: if signedIn() && notFrozenDelete();
+    }
     match /apps/platingjobwork/logs/{id}     { allow read, write: if signedIn(); }
     match /apps/platingjobwork/meta/{id}     { allow read, write: if signedIn(); }
     match /apps/platingjobwork/incoming/{id} { allow read, write: if signedIn(); } // welder→plating queue
@@ -43,7 +62,12 @@ service cloud.firestore {
     match /apps/orders { allow read, write: if signedIn(); }
 
     // ---- Welder Contractor (role-based) ----
-    match /apps/welder/dispatches/{id}      { allow read, write: if signedIn(); }
+    match /apps/welder/dispatches/{id} {
+      allow read:   if signedIn();
+      allow create: if signedIn() && notFrozenCreate();
+      allow update: if signedIn() && updateNotBackdating();
+      allow delete: if signedIn() && notFrozenDelete();
+    }
     match /apps/welder/products/{id}        { allow read, write: if signedIn(); }
     match /apps/welder/welders/{id}         { allow read, write: if signedIn(); }
     match /apps/welder/parties/{id}         { allow read, write: if signedIn(); }

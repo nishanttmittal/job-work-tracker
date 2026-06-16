@@ -1,7 +1,7 @@
 /**
  * Challan helpers — pure functions for numbering, flattening and edit-locking.
  */
-import { CHALLAN_PREFIX, EDIT_LOCK_HOURS } from '../config'
+import { CHALLAN_PREFIX, EDIT_LOCK_HOURS, FREEZE_BEFORE } from '../config'
 
 /** Format a counter value into a challan number, e.g. 7 -> "PJW-0007". */
 export function formatChallanNo(n) {
@@ -40,9 +40,24 @@ export function challanTotalQty(challan) {
 
 /** Is this challan locked for normal-user editing (older than the lock window)? */
 export function isLocked(challan, now = Date.now()) {
+  if (isHistoryFrozen(challan)) return true   // pre-June baseline is always locked
   if (!challan.createdAt) return false
   const ageMs = now - new Date(challan.createdAt).getTime()
   return ageMs > EDIT_LOCK_HOURS * 3600 * 1000
+}
+
+/**
+ * Is this DATED before the history-freeze cutoff (the verified pre-June baseline)?
+ * Frozen challans can't be created, deleted, or normally edited — only the Owner
+ * may correct them via Admin → Reconcile (reason + audit log).
+ */
+export function isHistoryFrozen(challan) {
+  return (challan?.date || '') < FREEZE_BEFORE && !!(challan?.date)
+}
+
+/** True if a yyyy-mm-dd date string falls in the frozen (pre-cutoff) range. */
+export function isFrozenDate(date) {
+  return !!date && date < FREEZE_BEFORE
 }
 
 /** Human "x hours/days ago" since an ISO timestamp. */

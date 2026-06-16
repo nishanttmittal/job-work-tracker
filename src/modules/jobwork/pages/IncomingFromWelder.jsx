@@ -7,18 +7,21 @@
  * Link fields (welderChallanNo, linkedChallanId, batchId, sourceApp,
  * destinationApp, parentTransactionId) are carried onto the created challan.
  */
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Select, useToast, Toast } from '../../../core/ui'
 import { fmtDate } from '../../../core/utils/format'
 import { useJobWork } from '../JobWorkContext'
 
 export default function IncomingFromWelder() {
-  const { incoming, parties, setParties, createChallan, log } = useJobWork()
+  const { incoming, parties, setParties, createChallan, log, challans } = useJobWork()
   const toast = useToast()
   const [editing, setEditing] = useState(null)   // id being edited
   const [draftItems, setDraftItems] = useState([])
   const [draftParty, setDraftParty] = useState('')
   const [busy, setBusy] = useState(false)
+  // Synchronous lock — blocks a 2nd tap BEFORE React re-renders `busy`, which is
+  // what previously let a double-tap create two plating challans for one welder challan.
+  const lockRef = useRef(false)
 
   const list = incoming?.list || []
   const pending = [...list].filter(x => (x.status || 'pending') === 'pending').sort((a, b) => (b.date || '').localeCompare(a.date || ''))
@@ -30,10 +33,25 @@ export default function IncomingFromWelder() {
   const setQty = (i, v) => setDraftItems(draftItems.map((x, idx) => idx === i ? { ...x, quantity: v } : x))
 
   const accept = async (it, items, party) => {
-    if (busy) return
+    if (lockRef.current || busy) return
     if (!party) return toast.show('Pick a party')
+    // ── Anti-duplicate guards ────────────────────────────────────────────────
+    // 1) Already handled in this queue.
+    if (it.status === 'accepted') return toast.show('Already accepted')
+    // 2) A plating challan already exists for this welder challan no — never make
+    //    a second one (covers reload / two devices / earlier double-accept). Just
+    //    re-link the queue item to the existing challan.
+    if (it.welderChallanNo) {
+      const existing = challans.list.find(c => c.welderChallanNo === it.welderChallanNo)
+      if (existing) {
+        incoming.update(it.id, { status: 'accepted', platingChallanNo: existing.challanNo, acceptedAt: new Date().toISOString() })
+        setEditing(null)
+        return toast.show(`Already in as ${existing.challanNo}`)
+      }
+    }
     const finalItems = (items || it.items || []).filter(x => x.product && Number(x.quantity) > 0).map(x => ({ product: x.product, quantity: Number(x.quantity) }))
     if (!finalItems.length) return toast.show('No items to accept')
+    lockRef.current = true
     setBusy(true)
     try {
       if (!parties.includes(party)) setParties([...parties, party])
@@ -49,7 +67,7 @@ export default function IncomingFromWelder() {
       setEditing(null)
     } catch {
       toast.show('⚠ Could not accept — check internet & retry', 3500)
-    } finally { setBusy(false) }
+    } finally { lockRef.current = false; setBusy(false) }
   }
 
   const reject = (it) => {

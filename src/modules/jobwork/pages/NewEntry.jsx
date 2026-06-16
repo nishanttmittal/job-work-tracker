@@ -7,6 +7,8 @@ import { Card, FieldLabel, Button, Select, TextInput, NumberInput, useToast, Toa
 import { MONTHS, toISODate, todayStr } from '../../../core/utils/format'
 import { useJobWork } from '../JobWorkContext'
 import { calcBalance } from '../logic/balance'
+import { isFrozenDate } from '../logic/challan'
+import { FREEZE_BEFORE } from '../config'
 
 const blankItem = () => ({ product: '', quantity: '' })
 
@@ -35,6 +37,7 @@ export default function NewEntry() {
   const days = Array.from({ length: new Date(year, month, 0).getDate() }, (_, i) => i + 1)
   const date = toISODate(day, month, year)
   const isToday = date === todayStr()
+  const frozen = isFrozenDate(date)   // pre-June baseline is locked — no back-dating
 
   // Accurate preview of the unique number that will be assigned on save.
   const nextNoPreview = peekNextChallanNo()
@@ -63,11 +66,12 @@ export default function NewEntry() {
   }
 
   const validItems = items.filter(it => it.product && Number(it.quantity) > 0)
-  const canSave = party && validItems.length > 0
+  const canSave = party && validItems.length > 0 && !frozen
   const totalPcs = validItems.reduce((s, it) => s + Number(it.quantity), 0)
 
   const [saving, setSaving] = useState(false)
   const save = async () => {
+    if (frozen) return toast.show(`🔒 Dates before ${FREEZE_BEFORE} are locked (verified history). Pick 1 June or later.`, 3500)
     if (!canSave || saving) return
     setSaving(true)
     try {
@@ -114,6 +118,11 @@ export default function NewEntry() {
               <Select value={day} onChange={e => setDay(+e.target.value)} options={days.map(String)} className={sel} />
               <Select value={month} onChange={e => setMonth(+e.target.value)} options={MONTHS.map((m, i) => ({ value: i + 1, label: m.slice(0,3) }))} className={sel} />
               <Select value={year} onChange={e => setYear(+e.target.value)} options={years.map(String)} className={sel} />
+            </div>
+          )}
+          {frozen && (
+            <div className="mt-3 bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-sm text-red-700 font-semibold">
+              🔒 Locked — data before {FREEZE_BEFORE} is the verified history and can't be added or back-dated. Choose 1 June 2026 or later.
             </div>
           )}
         </Card>

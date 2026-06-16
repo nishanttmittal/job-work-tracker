@@ -25,6 +25,12 @@ export default function Dashboard() {
     .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).slice(0, 5)
   const reconciled = challans.list.filter(c => c.reconciled && inView(c.party))
 
+  // Last-15-days entries for the tapped party (shown when a single party is in view).
+  const cutoff15 = (() => { const d = new Date(); d.setDate(d.getDate() - 14); return d.toISOString().slice(0, 10) })()
+  const last15 = view === 'all' ? [] : [...challans.list]
+    .filter(c => c.party === view && (c.date || '') >= cutoff15)
+    .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''))
+
   return (
     <div className="min-h-screen bg-slate-50 pb-8">
       {/* Party filter */}
@@ -46,7 +52,10 @@ export default function Dashboard() {
             Positive = pending (amber). Negative = excess received (red). */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="font-bold text-slate-700 text-sm">Party-wise Pending Material</h3>
+            <div>
+              <h3 className="font-bold text-slate-700 text-sm">Party-wise Pending Material</h3>
+              <p className="text-[11px] text-slate-400 mt-0.5 no-print">Tap a party to see its last 15 days of entries</p>
+            </div>
             {(() => {
               const net = summary.reduce((s, x) => s + x.pending, 0)
               return <span className={`text-xs font-bold ${net < 0 ? 'text-red-600' : 'text-amber-600'}`}>Net: {net} pcs</span>
@@ -83,6 +92,46 @@ export default function Dashboard() {
             ))}
           </div>
         </div>
+
+        {/* Last 15 days of entries for the tapped party */}
+        {view !== 'all' && (
+          <div className="bg-white rounded-2xl shadow-sm border border-blue-200 overflow-hidden">
+            <div className="bg-blue-600 text-white px-4 py-3 flex items-center justify-between">
+              <span className="font-bold text-sm">📅 Last 15 Days — {view}</span>
+              <button onClick={() => setView('all')} className="text-xs font-semibold bg-white/20 px-2.5 py-1 rounded-lg no-print">✕ All parties</button>
+            </div>
+            {last15.length === 0 ? (
+              <div className="px-4 py-8 text-center text-slate-400 text-sm">No entries in the last 15 days.</div>
+            ) : (
+              <div className="divide-y divide-slate-50 max-h-[60vh] overflow-y-auto">
+                {last15.map(c => {
+                  const pcs = (c.items || []).reduce((s, it) => s + Number(it.quantity), 0)
+                  return (
+                    <div key={c.id} className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${c.direction === 'out' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                          {c.direction === 'out' ? 'OUT' : 'IN'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-semibold text-slate-700">
+                            <span className="font-mono text-xs text-slate-400">{c.challanNo}</span> · {fmtDate(c.date)}
+                            {c.welderChallanNo && <span className="ml-1 text-[10px] text-cyan-600 font-bold">welder {c.welderChallanNo}</span>}
+                          </div>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {(c.items || []).map((it, i) => (
+                              <span key={i} className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-lg font-medium">{it.product}: {it.quantity}</span>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="font-bold text-slate-700 text-sm flex-shrink-0">{pcs} pcs</div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Red flags */}
         {flags.length > 0 && (

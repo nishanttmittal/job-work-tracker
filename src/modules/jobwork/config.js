@@ -30,6 +30,17 @@ export const CHALLAN_PREFIX = 'PJW'
 /** A challan becomes read-only to normal users this many hours after creation. */
 export const EDIT_LOCK_HOURS = 24
 
+/**
+ * HISTORY FREEZE — the pre-June 2026 data is the verified Excel-imported baseline.
+ * Any challan DATED before this is frozen:
+ *   • cannot be created / back-dated (New Challan + Excel import refuse it),
+ *   • cannot be deleted (Admin delete + duplicate detector skip it),
+ *   • Managers/Floor see it read-only; the Owner can still correct it ONLY via
+ *     Admin → Reconcile (mandatory reason + audit log).
+ * Mirrors the welder app's FREEZE_BEFORE and PLATING_SYNC_FROM cutoff.
+ */
+export const FREEZE_BEFORE = '2026-06-01'
+
 /** OUT material pending longer than this many days triggers a reminder. */
 export const OUT_REMINDER_DAYS = 7
 

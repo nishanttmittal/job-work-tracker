@@ -5,14 +5,14 @@
  *  • Rename products (cascades into challan line items)
  *  • Delete by date range · Backup/Restore · Reset all
  */
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { SearchBar, Select, useToast, Toast } from '../../../core/ui'
 import { fmtDate, todayStr } from '../../../core/utils/format'
 import { useJobWork } from '../JobWorkContext'
-import { challanTotalQty } from '../logic/challan'
+import { challanTotalQty, isHistoryFrozen } from '../logic/challan'
 import { parseJobWorkExcel } from '../logic/excelImport'
 import ChallanEditor from '../components/ChallanEditor'
-import { OWNER_EMAILS } from '../config'
+import { OWNER_EMAILS, FREEZE_BEFORE } from '../config'
 
 // Access is enforced by role: this whole tab is Admin-only (see manifest roles).
 export default function Admin() {
@@ -124,11 +124,52 @@ function Reconcile({ challans, parties, products, log, toast }) {
     setEditing(null)
   }
 
+  const del = (c) => {
+    if (isHistoryFrozen(c)) return toast.show(`🔒 ${c.challanNo} is locked history (before ${FREEZE_BEFORE}). To correct it, use Edit (Reconcile) with a reason.`, 4000)
+    if (!confirm(`Delete challan ${c.challanNo}?\n\n${c.party} · ${c.direction.toUpperCase()} · ${fmtDate(c.date)} · ${challanTotalQty(c)} pcs\n\nThis permanently removes it and changes the balance. Cannot be undone.`)) return
+    challans.remove(c.id)
+    log('DELETE', `${c.challanNo} deleted (${c.party}, ${c.direction.toUpperCase()}, ${challanTotalQty(c)} pcs)${c.welderChallanNo ? ' [welder ' + c.welderChallanNo + ']' : ''}`, 'admin')
+    toast.show(`Deleted ${c.challanNo}`)
+  }
+
+  // Duplicate detector — challans that share the same welder challan number
+  // (the exact bug that double-counted material). Each extra can be deleted here.
+  const dupGroups = useMemo(() => {
+    const by = {}
+    challans.list.forEach(c => { if (c.welderChallanNo) (by[c.welderChallanNo] || (by[c.welderChallanNo] = [])).push(c) })
+    return Object.entries(by)
+      .filter(([, arr]) => arr.length > 1)
+      .map(([wno, arr]) => [wno, [...arr].sort((a, b) => (a.challanNo || '').localeCompare(b.challanNo || ''))])
+  }, [challans.list])
+
   return (
     <div className="space-y-3">
       <div className="bg-violet-50 border border-violet-200 rounded-xl px-4 py-3 text-sm text-violet-700">
-        Edit any challan (including locked ones). A reason is required and recorded in the audit log.
+        Edit any challan (including locked ones). A reason is required and recorded in the audit log. Use <b>Delete</b> to remove a single wrong or duplicate challan.
       </div>
+
+      {dupGroups.length > 0 && (
+        <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4 space-y-3">
+          <div className="text-sm font-bold text-red-700">⚠ Duplicate challans found ({dupGroups.length})</div>
+          <p className="text-xs text-red-600 -mt-1">Same welder challan accepted more than once. Keep one, delete the extras.</p>
+          {dupGroups.map(([wno, arr]) => (
+            <div key={wno} className="bg-white rounded-lg border border-red-200 p-2">
+              <div className="text-xs font-semibold text-slate-500 mb-1">Welder challan <span className="font-mono text-blue-600">{wno}</span> · {arr.length} copies</div>
+              {arr.map((c, i) => (
+                <div key={c.id} className="flex items-center gap-2 py-1 text-sm">
+                  <span className="flex-1 min-w-0 truncate">
+                    <span className="font-mono text-xs text-slate-400">{c.challanNo}</span> · {c.party} · {c.direction.toUpperCase()} · {challanTotalQty(c)} pcs
+                  </span>
+                  {i === 0
+                    ? <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded">KEEP</span>
+                    : <button onClick={() => del(c)} className="text-xs font-bold bg-red-600 text-white px-3 py-1 rounded">Delete</button>}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
       <SearchBar value={search} onChange={setSearch} placeholder="Find challan by no, party or product…" />
       {rows.map(c => (
         <div key={c.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -138,10 +179,14 @@ function Reconcile({ challans, parties, products, log, toast }) {
             <div className="p-4 flex items-center gap-3">
               <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold ${c.direction === 'out' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>{c.direction === 'out' ? 'OUT' : 'IN'}</div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold text-slate-700"><span className="font-mono text-xs text-slate-400">{c.challanNo}</span> · {c.party}</div>
+                <div className="text-sm font-semibold text-slate-700">
+                  <span className="font-mono text-xs text-slate-400">{c.challanNo}</span> · {c.party}
+                  {isHistoryFrozen(c) && <span className="ml-1.5 text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">🔒 HISTORY</span>}
+                </div>
                 <div className="text-xs text-slate-400">{fmtDate(c.date)} · {(c.items || []).length} item(s) · {challanTotalQty(c)} pcs</div>
               </div>
               <button onClick={() => setEditing(c.id)} className="px-3 py-1.5 bg-violet-600 text-white rounded-lg text-xs font-semibold">Edit</button>
+              {!isHistoryFrozen(c) && <button onClick={() => del(c)} className="px-3 py-1.5 bg-red-100 text-red-600 rounded-lg text-xs font-semibold">Delete</button>}
             </div>
           )}
         </div>
@@ -278,6 +323,12 @@ function ImportExcel({ parties, toast }) {
   const [importing, setImporting] = useState(false)
   const doImport = async () => {
     if (!preview || importing) return
+    // History freeze: never re-import pre-June rows (they'd duplicate the locked baseline).
+    const frozenRows = preview.challans.filter(c => (c.date || '') < FREEZE_BEFORE).length
+    if (frozenRows) {
+      toast.show(`🔒 ${frozenRows} row(s) are before ${FREEZE_BEFORE} — that history is locked and won't be re-imported. Trim the sheet to 1 June onward.`, 5000)
+      return
+    }
     setImporting(true)
     try {
       // add any new products discovered
@@ -384,7 +435,8 @@ function Manage({ challans, logs, parties, setParties, products, setProducts, lo
   const [nowTs] = useState(() => Date.now())
 
   const matchDel = (c) =>
-    (!delFrom || c.date >= delFrom) && (!delTo || c.date <= delTo)
+    !isHistoryFrozen(c)   // never range-delete the locked pre-June baseline
+    && (!delFrom || c.date >= delFrom) && (!delTo || c.date <= delTo)
     && (dirF === 'all' || c.direction === dirF)
     && (partyF === 'all' || c.party === partyF)
     && (prodF === 'all' || (c.items || []).some(it => it.product === prodF))
