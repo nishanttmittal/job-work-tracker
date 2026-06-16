@@ -15,7 +15,7 @@ import { useEffect, useState, useCallback } from 'react'
 import {
   onSnapshot, setDoc, deleteDoc, getDocs, writeBatch,
 } from 'firebase/firestore'
-import { db, paths, ensureSignedIn, reserveChallanNumber, reserveChallanBlock } from '../../core/db/firebase'
+import { db, paths, ensureSignedIn, reserveChallanNumber, reserveChallanBlock, watchAuth } from '../../core/db/firebase'
 import { makeNormalizer } from '../../core/schema/field'
 import { makeId } from '../../core/db/repository'
 import { flattenChallans, formatChallanNo } from './logic/challan'
@@ -41,39 +41,56 @@ export function FirestoreProvider({ children }) {
   const [counter, setCounter] = useState(0)
 
   const [timedOut, setTimedOut] = useState(false)
+  // authKey changes anon -> Google so data listeners re-subscribe after login
+  // (else listeners attached while anonymous stay permission-denied once the
+  // data collections are allowlist-locked, and the app loads blank).
+  const [authKey, setAuthKey] = useState('anon')
+  useEffect(() => watchAuth((u) => setAuthKey(u ? `${u.uid}:${u.email || ''}` : 'none')), [])
 
-  // Sign in (anonymous) then attach real-time listeners.
+  // Baseline anonymous sign-in + readiness probe (runs once). `users` stays
+  // readable by any signed-in device (incl. anonymous) so the app can resolve
+  // the Google role before login; the data collections below are allowlist-locked.
   useEffect(() => {
-    let unsubs = []
     let done = false
-    // Safety net: if we can't reach the cloud in 12s (e.g. unauthorized domain,
-    // no network), stop showing the infinite loader and surface a Retry screen.
     const timer = setTimeout(() => { if (!done) setTimedOut(true) }, 12000)
-
-    ensureSignedIn()
-      .then(() => {
-        unsubs.push(onSnapshot(paths.challans(),
-          (snap) => { done = true; clearTimeout(timer); setChallansList(snap.docs.map(d => normalize({ id: d.id, ...d.data() }))); setReady(true) },
-          (e) => { done = true; clearTimeout(timer); setError(e.message); setReady(true) }))
-        unsubs.push(onSnapshot(paths.logs(),
-          (snap) => setLogsList(snap.docs.map(d => ({ id: d.id, ...d.data() })))))
-        unsubs.push(onSnapshot(paths.parties(),
-          (snap) => { if (snap.exists() && Array.isArray(snap.data().list)) setPartiesState(snap.data().list) }))
-        unsubs.push(onSnapshot(paths.products(),
-          (snap) => { if (snap.exists() && Array.isArray(snap.data().list)) setProductsState(snap.data().list) }))
-        unsubs.push(onSnapshot(paths.matchlinks(),
-          (snap) => { if (snap.exists() && Array.isArray(snap.data().list)) setMatchLinksState(snap.data().list) }))
-        unsubs.push(onSnapshot(paths.counter(),
-          (snap) => setCounter(snap.exists() ? (snap.data().value || 0) : 0)))
-        unsubs.push(onSnapshot(paths.users(),
-          (snap) => setUsersList(snap.docs.map(d => ({ id: d.id, ...d.data() })))))
-        unsubs.push(onSnapshot(paths.incoming(),
-          (snap) => setIncomingList(snap.docs.map(d => normIncoming({ id: d.id, ...d.data() })))))
-      })
-      .catch((e) => { done = true; clearTimeout(timer); setError(e.message); setTimedOut(true) })
-
-    return () => { clearTimeout(timer); unsubs.forEach(u => u()) }
+    const unsub = onSnapshot(paths.users(),
+      () => { done = true; clearTimeout(timer); setReady(true) },
+      (e) => { done = true; clearTimeout(timer); setError(e.message); setReady(true) })
+    ensureSignedIn().catch((e) => { done = true; clearTimeout(timer); setError(e.message); setTimedOut(true) })
+    return () => { clearTimeout(timer); unsub() }
   }, [])
+
+  // Data listeners — re-subscribe when the signed-in user changes (anon ->
+  // Google) so locked collections load AFTER sign-in instead of staying denied.
+  // Error callbacks tolerate permission-denied (non-allowlisted = empty, no crash).
+  useEffect(() => {
+    const unsubs = []
+    unsubs.push(onSnapshot(paths.challans(),
+      (snap) => setChallansList(snap.docs.map(d => normalize({ id: d.id, ...d.data() }))),
+      () => setChallansList([])))
+    unsubs.push(onSnapshot(paths.logs(),
+      (snap) => setLogsList(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      () => setLogsList([])))
+    unsubs.push(onSnapshot(paths.parties(),
+      (snap) => { if (snap.exists() && Array.isArray(snap.data().list)) setPartiesState(snap.data().list) },
+      () => {}))
+    unsubs.push(onSnapshot(paths.products(),
+      (snap) => { if (snap.exists() && Array.isArray(snap.data().list)) setProductsState(snap.data().list) },
+      () => {}))
+    unsubs.push(onSnapshot(paths.matchlinks(),
+      (snap) => { if (snap.exists() && Array.isArray(snap.data().list)) setMatchLinksState(snap.data().list) },
+      () => {}))
+    unsubs.push(onSnapshot(paths.counter(),
+      (snap) => setCounter(snap.exists() ? (snap.data().value || 0) : 0),
+      () => {}))
+    unsubs.push(onSnapshot(paths.users(),
+      (snap) => setUsersList(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      () => setUsersList([])))
+    unsubs.push(onSnapshot(paths.incoming(),
+      (snap) => setIncomingList(snap.docs.map(d => normIncoming({ id: d.id, ...d.data() }))),
+      () => setIncomingList([])))
+    return () => unsubs.forEach(u => u())
+  }, [authKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── writers ──────────────────────────────────────────────────────────────
   const setParties = useCallback((list) => { setPartiesState(list); setDoc(paths.parties(), { list }) }, [])
