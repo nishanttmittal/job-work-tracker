@@ -13,8 +13,9 @@
  */
 import { useEffect, useState, useCallback } from 'react'
 import {
-  onSnapshot, setDoc, deleteDoc, getDocs, writeBatch,
+  setDoc, deleteDoc, writeBatch,
 } from 'firebase/firestore'
+import { onSnapshot, getDocs } from '../../core/db/readmeter'   // metered reads → usage_reads (quota diagnosis)
 import { db, paths, ensureSignedIn, reserveChallanNumber, reserveChallanBlock, watchAuth } from '../../core/db/firebase'
 import { makeNormalizer } from '../../core/schema/field'
 import { makeId } from '../../core/db/repository'
