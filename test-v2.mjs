@@ -67,7 +67,7 @@ await shot('4-modify')
 await step('Admin → reconcile + logs tabs', async () => {
   await page.click('text=Home'); await page.waitForSelector('button:has-text("Admin")')
   await page.click('button:has-text("Admin")')
-  await page.fill('input[type=password]', '6133923_N')
+  await page.fill('input[type=password]', '[removed]')
   await page.click('text=Unlock')
   await page.waitForSelector('text=Reconcile', { timeout: 5000 })
   await page.click('text=📜 Logs')

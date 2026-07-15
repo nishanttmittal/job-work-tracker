@@ -71,7 +71,7 @@ await shot('4-search')
 await step('Admin backup downloads', async () => {
   await page.click('text=Home'); await page.waitForSelector('button:has-text("Admin")')
   await page.click('button:has-text("Admin")')
-  await page.fill('input[type=password]', '6133923_N')
+  await page.fill('input[type=password]', '[removed]')
   await page.click('text=Unlock')
   await page.waitForSelector('text=Backup & Restore', { timeout: 5000 })
   const dl = page.waitForEvent('download', { timeout: 5000 })

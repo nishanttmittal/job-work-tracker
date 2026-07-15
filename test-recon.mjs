@@ -28,7 +28,7 @@ await step('Seed one challan, boot clean', async () => {
 
 await step('Admin → Reconcile → edit with reason', async () => {
   await page.click('button:has-text("Admin")')
-  await page.fill('input[type=password]', '6133923_N')
+  await page.fill('input[type=password]', '[removed]')
   await page.click('text=Unlock')
   await page.waitForSelector('text=🔧 Reconcile')
   await page.click('button:has-text("Edit")')

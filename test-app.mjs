@@ -112,7 +112,7 @@ await step('Open Admin (gate)', async () => {
 await shot('8-admin-gate')
 
 await step('Unlock Admin with password', async () => {
-  await page.fill('input[type=password]', '6133923_N')
+  await page.fill('input[type=password]', '[removed]')
   await page.click('text=Unlock')
   await page.waitForSelector('text=Rename Products', { timeout: 5000 })
 })

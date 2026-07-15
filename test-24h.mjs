@@ -16,7 +16,7 @@ await step('Load app', async () => {
 await step('Modify (password) HIDES the 2-day-old PJW-9999', async () => {
   await page.click('text=Modify Challans')
   await page.waitForSelector('text=Enter Password to Modify')
-  await page.fill('input[type=password]', 'nsp@123')
+  await page.fill('input[type=password]', '[removed]')
   await page.click('button:has-text("Unlock")')
   await page.waitForSelector('input[type=search]', { timeout: 6000 })
   await page.waitForTimeout(1500)
@@ -28,7 +28,7 @@ await step('Modify (password) HIDES the 2-day-old PJW-9999', async () => {
 await step('Admin → Reconcile SHOWS PJW-9999 (still editable there)', async () => {
   await page.click('text=Home'); await page.waitForSelector('text=New Challan')
   await page.click('button:has-text("Admin")')
-  await page.fill('input[type=password]', '6133923_N')
+  await page.fill('input[type=password]', '[removed]')
   await page.click('button:has-text("Unlock with Password")')
   await page.waitForSelector('text=🔧 Reconcile', { timeout: 6000 })
   await page.fill('input[type=search]', '9999')

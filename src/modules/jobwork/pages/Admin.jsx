@@ -6,7 +6,7 @@
  *  • Delete by date range · Backup/Restore · Reset all
  */
 import { useState, useMemo } from 'react'
-import { SearchBar, Select, useToast, Toast } from '../../../core/ui'
+import { SearchBar, Select, DateInput, useToast, Toast } from '../../../core/ui'
 import { fmtDate, todayStr } from '../../../core/utils/format'
 import { useJobWork } from '../JobWorkContext'
 import { challanTotalQty, isHistoryFrozen } from '../logic/challan'
@@ -110,12 +110,14 @@ function ManageUsers() {
 /* ── Reconciliation: edit any challan with a mandatory reason ────────────── */
 function Reconcile({ challans, parties, products, log, toast }) {
   const [search, setSearch] = useState('')
+  const [dateFilter, setDateFilter] = useState('')
   const [editing, setEditing] = useState(null)
   const q = search.trim().toLowerCase()
-  const rows = challans.list
-    .filter(c => !q || (c.challanNo || '').toLowerCase().includes(q) || c.party.toLowerCase().includes(q) || (c.items || []).some(it => it.product.toLowerCase().includes(q)))
+  const matched = challans.list
+    .filter(c => !q || (c.challanNo || '').toLowerCase().includes(q) || c.party.toLowerCase().includes(q) || (c.items || []).some(it => it.product.toLowerCase().includes(q)) || fmtDate(c.date).includes(q) || (c.date || '').includes(q))
+    .filter(c => !dateFilter || c.date === dateFilter)
     .sort((a, b) => (b.date || '').localeCompare(a.date))
-    .slice(0, 50)
+  const rows = matched.slice(0, 50)
 
   const save = (updated, reason) => {
     challans.update(updated.id, { ...updated, reconciled: true, reconcileReason: reason })
@@ -170,7 +172,15 @@ function Reconcile({ challans, parties, products, log, toast }) {
         </div>
       )}
 
-      <SearchBar value={search} onChange={setSearch} placeholder="Find challan by no, party or product…" />
+      <SearchBar value={search} onChange={setSearch} placeholder="Find by no, party, product or date…" />
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs font-semibold text-slate-500">📅 By date</span>
+        <DateInput value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="w-auto" />
+        {dateFilter && <button onClick={() => setDateFilter('')} className="text-xs font-semibold text-violet-600 underline">clear</button>}
+        <span className="text-xs text-slate-400 ml-auto">
+          {matched.length} match{matched.length === 1 ? '' : 'es'}{matched.length > 50 ? ' · showing latest 50 — pick a date to narrow' : ''}
+        </span>
+      </div>
       {rows.map(c => (
         <div key={c.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
           {editing === c.id ? (

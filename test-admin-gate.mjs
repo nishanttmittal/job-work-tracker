@@ -42,7 +42,7 @@ await step('Wrong password rejected', async () => {
 })
 
 await step('Correct password unlocks (fallback works → no lockout)', async () => {
-  await page.fill('input[type=password]', '6133923_N')
+  await page.fill('input[type=password]', '[removed]')
   await page.click('button:has-text("Unlock with Password")')
   await page.waitForSelector('text=🔧 Reconcile', { timeout: 5000 })
 })

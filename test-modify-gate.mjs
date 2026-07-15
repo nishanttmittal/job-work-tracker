@@ -32,8 +32,8 @@ await step('Wrong password rejected', async () => {
   await page.waitForSelector('text=Incorrect password', { timeout: 4000 })
 })
 
-await step('User password nsp@123 opens it', async () => {
-  await page.fill('input[type=password]', 'nsp@123')
+await step('User password [removed] opens it', async () => {
+  await page.fill('input[type=password]', '[removed]')
   await page.click('button:has-text("Unlock")')
   await page.waitForSelector('input[type=search]', { timeout: 5000 })
 })
@@ -41,7 +41,7 @@ await step('User password nsp@123 opens it', async () => {
 await step('Admin password also opens it', async () => {
   await openModify()
   await page.waitForSelector('text=Enter Password to Modify', { timeout: 5000 })
-  await page.fill('input[type=password]', '6133923_N')
+  await page.fill('input[type=password]', '[removed]')
   await page.click('button:has-text("Unlock")')
   await page.waitForSelector('input[type=search]', { timeout: 5000 })
 })

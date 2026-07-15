@@ -23,7 +23,7 @@ await step('Both devices connect to cloud', async () => {
 
 await step('Reset cloud (Admin) on device A', async () => {
   await A.click('button:has-text("Admin")')
-  await A.fill('input[type=password]', '6133923_N')
+  await A.fill('input[type=password]', '[removed]')
   await A.click('text=Unlock')
   await A.click('text=⚙️ Manage')
   await A.click('button:has-text("Reset All Challans")')

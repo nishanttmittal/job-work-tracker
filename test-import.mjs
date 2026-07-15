@@ -26,7 +26,7 @@ await step('Admin login', async () => {
   await page.evaluate(() => localStorage.clear())
   await page.reload({ waitUntil: 'networkidle' })
   await page.click('button:has-text("Admin")')
-  await page.fill('input[type=password]', '6133923_N')
+  await page.fill('input[type=password]', '[removed]')
   await page.click('text=Unlock')
   await page.waitForSelector('text=📥 Import')
 })
