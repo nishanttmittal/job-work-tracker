@@ -65,10 +65,14 @@ export const paths = {
 export function ensureSignedIn() {
   return new Promise((resolve, reject) => {
     if (!auth) return reject(new Error('Firebase not configured'))
+    // FIX 2026-07-19 (login-loop class, same as transport-freight finding C): never let the
+    // anonymous baseline CLOBBER a restored Google session (esp. after signInWithRedirect on an
+    // installed PWA). Wait for the first auth state; go anonymous only when there is NO user.
+    let triedAnon = false
     const unsub = onAuthStateChanged(auth, (user) => {
-      if (user) { unsub(); resolve(user.uid) }
+      if (user) { unsub(); resolve(user.uid); return }
+      if (!triedAnon) { triedAnon = true; signInAnonymously(auth).catch((e) => { unsub(); reject(e) }) }
     })
-    signInAnonymously(auth).catch(reject)
   })
 }
 
