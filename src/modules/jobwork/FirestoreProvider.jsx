@@ -26,6 +26,17 @@ import { DEFAULT_PARTIES, DEFAULT_PRODUCTS } from './config'
 import { lastUsedStore } from './data'
 import { JobWorkCtx } from './JobWorkContext'
 
+// Batch ops are CHUNKED (Firestore caps a WriteBatch at 500 ops — the 600+ challan set made the
+// old single-batch commits throw) — fix 2026-07-18.
+const CHUNK = 400
+async function chunkedBatch(items, op) {
+  for (let i = 0; i < items.length; i += CHUNK) {
+    const b = writeBatch(db)
+    items.slice(i, i + CHUNK).forEach((it) => op(b, it))
+    await b.commit()
+  }
+}
+
 const normalize = makeNormalizer(challanSchema)
 const normIncoming = makeNormalizer(incomingSchema)
 
@@ -135,22 +146,23 @@ export function FirestoreProvider({ children }) {
     remove: (id) => deleteDoc(paths.challan(id)),
     removeWhere: (pred) => {
       const hit = challansList.filter(pred)
-      const batch = writeBatch(db)
-      hit.forEach(c => batch.delete(paths.challan(c.id)))
-      batch.commit()
+      chunkedBatch(hit, (b, c) => b.delete(paths.challan(c.id)))
       return hit.length
     },
+    // WRITE-FIRST restore, CHUNKED batches (fix 2026-07-18): the old delete-all-then-write left
+    // the collection EMPTY if interrupted between the two commits — and with 600+ challans the
+    // single 500-op batch threw anyway (restore was silently broken). Now the backup is written
+    // first (overwriting same ids), then only stale docs are removed; data is never missing.
     replaceAll: async (list) => {
-      // restore: clear then write all
       const existing = await getDocs(paths.challans())
-      const b1 = writeBatch(db); existing.forEach(d => b1.delete(d.ref)); await b1.commit()
-      const b2 = writeBatch(db)
-      list.forEach(c => { const id = c.id || makeId('c'); b2.set(paths.challan(id), { ...c, id }) })
-      await b2.commit()
+      const next = (list || []).map(c => { const id = c.id || makeId('c'); return { ...c, id } })
+      await chunkedBatch(next, (b, c) => b.set(paths.challan(c.id), c))
+      const keep = new Set(next.map(c => c.id))
+      await chunkedBatch(existing.docs.filter(d => !keep.has(d.id)), (b, d) => b.delete(d.ref))
     },
     reset: async () => {
       const existing = await getDocs(paths.challans())
-      const b = writeBatch(db); existing.forEach(d => b.delete(d.ref)); await b.commit()
+      await chunkedBatch(existing.docs, (b, d) => b.delete(d.ref))
     },
   }
 

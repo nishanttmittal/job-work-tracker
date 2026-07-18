@@ -496,6 +496,8 @@ function Manage({ challans, logs, parties, setParties, products, setProducts, lo
       try {
         const data = JSON.parse(e.target.result)
         if (!Array.isArray(data.challans)) throw new Error('Invalid backup file')
+        // typed confirm (fix 2026-07-18): restore replaces EVERYTHING — it must never run on a stray file-pick
+        if (prompt(`Restore will REPLACE all ${challans.list.length} current challans with "${file.name}" (${data.challans.length} challans).\nType RESTORE to continue:`) !== 'RESTORE') { toast.show('Restore cancelled'); return }
         challans.replaceAll(data.challans)
         if (Array.isArray(data.parties) && data.parties.length) setParties(data.parties)
         if (Array.isArray(data.products) && data.products.length) setProducts(data.products)

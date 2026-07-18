@@ -39,8 +39,19 @@ function ModifyEntryInner() {
     .sort((a, b) => (b.date || '').localeCompare(a.date) || (b.createdAt || '').localeCompare(a.createdAt || ''))
 
   const saveEdit = (updated) => {
+    // Audit old→new (fix 2026-07-18): quantity edits move party balances — the bare "edited"
+    // log line hid WHAT changed. Record each changed field/item as before→after.
+    const before = challans.list.find(c => c.id === updated.id) || {}
+    const diffs = []
+    if (before.date !== updated.date) diffs.push(`date ${before.date}→${updated.date}`)
+    if (before.party !== updated.party) diffs.push(`party ${before.party}→${updated.party}`)
+    const bi = before.items || [], ui = updated.items || []
+    for (const name of [...new Set([...bi.map(i => i.product), ...ui.map(i => i.product)])]) {
+      const b = bi.find(i => i.product === name), u = ui.find(i => i.product === name)
+      if ((b?.quantity ?? '—') !== (u?.quantity ?? '—')) diffs.push(`${name} ${b?.quantity ?? '—'}→${u?.quantity ?? '—'}`)
+    }
     challans.update(updated.id, updated)
-    log('EDIT', `${updated.challanNo} edited`)
+    log('EDIT', `${updated.challanNo} edited${diffs.length ? ' · ' + diffs.join(', ') : ''}`)
     setEditing(null)
   }
   const small = 'border-2 border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-4 focus:ring-blue-200 bg-white'
