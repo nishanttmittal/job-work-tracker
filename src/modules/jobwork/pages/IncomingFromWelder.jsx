@@ -10,6 +10,8 @@
 import { useState, useRef } from 'react'
 import { Select, useToast, Toast } from '../../../core/ui'
 import { fmtDate } from '../../../core/utils/format'
+import { claimIncoming, releaseIncoming } from '../../../core/db/firebase'
+import { makeId } from '../../../core/db/repository'
 import { useJobWork } from '../JobWorkContext'
 
 export default function IncomingFromWelder() {
@@ -53,7 +55,22 @@ export default function IncomingFromWelder() {
     if (!finalItems.length) return toast.show('No items to accept')
     lockRef.current = true
     setBusy(true)
+    // 3) The real guard. Everything above reads THIS device's local copy, so two
+    //    phones accepting at the same moment both see "not accepted yet". This
+    //    claim runs server-side in a transaction — exactly one device wins.
+    const claimId = makeId('clm')
+    let claimed = false
     try {
+      const claim = await claimIncoming(it.id, claimId)
+      if (!claim.ok) {
+        setEditing(null)
+        if (claim.reason === 'accepted')
+          return toast.show(claim.platingChallanNo ? `Already in as ${claim.platingChallanNo}` : 'Already accepted')
+        if (claim.reason === 'claimed') return toast.show('Another device is accepting this right now', 3000)
+        return toast.show('This challan is no longer in the queue')
+      }
+      claimed = true
+
       if (!parties.includes(party)) setParties([...parties, party])
       const challan = await createChallan({
         date: it.date, party, direction: 'out', gaadi: it.gaadi || '',
@@ -61,11 +78,15 @@ export default function IncomingFromWelder() {
         welderChallanNo: it.welderChallanNo, linkedChallanId: it.linkedChallanId, batchId: it.batchId,
         sourceApp: it.sourceApp || 'welder', destinationApp: it.destinationApp || 'platingjobwork', parentTransactionId: it.parentTransactionId || '',
       })
-      incoming.update(it.id, { status: 'accepted', platingChallanNo: challan.challanNo, party, items: finalItems, acceptedAt: new Date().toISOString() })
+      // Awaited: previously fire-and-forget, so a challan could be created while
+      // the queue item stayed "pending" and looked un-accepted.
+      await incoming.update(it.id, { status: 'accepted', platingChallanNo: challan.challanNo, party, items: finalItems, acceptedAt: new Date().toISOString() })
       log('ACCEPT_INCOMING', `${it.welderChallanNo || ''} → ${challan.challanNo} (${party})`, 'admin')
       toast.show(`Accepted → ${challan.challanNo}`)
       setEditing(null)
     } catch {
+      // Hand the claim back so the item isn't locked until the TTL expires.
+      if (claimed) { try { await releaseIncoming(it.id, claimId) } catch { /* TTL will clear it */ } }
       toast.show('⚠ Could not accept — check internet & retry', 3500)
     } finally { lockRef.current = false; setBusy(false) }
   }

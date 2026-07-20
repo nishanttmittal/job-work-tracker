@@ -93,6 +93,52 @@ export async function reserveChallanNumber() {
   })
 }
 
+/* How long a claim on an incoming challan stays valid. If a device claims one
+   and then dies (browser closed, phone locked, tab crashed) the item must not
+   be stuck forever — after this it can be claimed again. */
+const CLAIM_TTL_MS = 2 * 60 * 1000
+
+/**
+ * Atomically CLAIM an incoming welder challan so only one device can accept it.
+ *
+ * The old guards (a session lock, plus looking for an existing plating challan
+ * with the same welderChallanNo) both read this device's LOCAL copy of the
+ * list. Two phones accepting at the same moment each see "no challan yet" and
+ * both create one — a duplicate plating record for one physical challan, which
+ * means paying for plating twice.
+ *
+ * This runs server-side in a transaction, so exactly one device can win.
+ * Returns { ok:true } to the winner, or { ok:false, reason } to everyone else.
+ */
+export async function claimIncoming(id, claimId) {
+  return runTransaction(db, async (tx) => {
+    const ref = paths.incomingDoc(id)
+    const snap = await tx.get(ref)
+    if (!snap.exists()) return { ok: false, reason: 'missing' }
+    const d = snap.data() || {}
+    if (d.status === 'accepted')
+      return { ok: false, reason: 'accepted', platingChallanNo: d.platingChallanNo || '' }
+    const heldByOther = d.claimId && d.claimId !== claimId
+    const fresh = d.claimedAt && (Date.now() - Date.parse(d.claimedAt)) < CLAIM_TTL_MS
+    if (heldByOther && fresh) return { ok: false, reason: 'claimed' }
+    tx.set(ref, { claimId, claimedAt: new Date().toISOString() }, { merge: true })
+    return { ok: true }
+  })
+}
+
+/** Give back a claim we could not complete, so the item isn't stuck until the
+ *  TTL expires. Only clears the claim if we still hold it. */
+export async function releaseIncoming(id, claimId) {
+  return runTransaction(db, async (tx) => {
+    const ref = paths.incomingDoc(id)
+    const snap = await tx.get(ref)
+    if (!snap.exists()) return
+    const d = snap.data() || {}
+    if (d.claimId === claimId && d.status !== 'accepted')
+      tx.set(ref, { claimId: '', claimedAt: '' }, { merge: true })
+  })
+}
+
 /**
  * Atomically reserve a BLOCK of `n` numbers (for bulk import). Returns the
  * first number of the block; callers use first … first+n-1.
