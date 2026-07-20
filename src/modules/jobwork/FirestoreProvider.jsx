@@ -19,6 +19,7 @@ import { onSnapshot, getDocs } from '../../core/db/readmeter'   // metered reads
 import { db, paths, ensureSignedIn, reserveChallanNumber, reserveChallanBlock, watchAuth } from '../../core/db/firebase'
 import { makeNormalizer } from '../../core/schema/field'
 import { makeId } from '../../core/db/repository'
+import { SaveStatus } from '../../core/ui'
 import { flattenChallans, formatChallanNo } from './logic/challan'
 import { normalizeProductName } from '../../core/utils/format'
 import { challanSchema, incomingSchema } from './schema'
@@ -47,6 +48,11 @@ export function FirestoreProvider({ children }) {
   const [logsList, setLogsList] = useState([])
   const [usersList, setUsersList] = useState([])
   const [incomingList, setIncomingList] = useState([])
+  // Save state: pending = written locally, not yet server-acknowledged (NORMAL
+  // on the floor, not an error). failed = the server actually rejected it.
+  const [pendingChallans, setPendingChallans] = useState(false)
+  const [pendingIncoming, setPendingIncoming] = useState(false)
+  const [failedWrites, setFailedWrites] = useState(0)
   const [parties, setPartiesState] = useState(DEFAULT_PARTIES)
   const [products, setProductsState] = useState(DEFAULT_PRODUCTS)
   const [matchLinks, setMatchLinksState] = useState([])
@@ -77,8 +83,13 @@ export function FirestoreProvider({ children }) {
   // Error callbacks tolerate permission-denied (non-allowlisted = empty, no crash).
   useEffect(() => {
     const unsubs = []
-    unsubs.push(onSnapshot(paths.challans(),
-      (snap) => setChallansList(snap.docs.map(d => normalize({ id: d.id, ...d.data() }))),
+    // includeMetadataChanges is what makes hasPendingWrites update as writes
+    // settle. Metadata-only fires produce no docChanges(), so this costs no
+    // extra Firestore read quota. We do NOT await the write promise: with
+    // offline persistence it doesn't resolve until reconnect, so awaiting it
+    // would show a permanent spinner offline.
+    unsubs.push(onSnapshot(paths.challans(), { includeMetadataChanges: true },
+      (snap) => { setChallansList(snap.docs.map(d => normalize({ id: d.id, ...d.data() }))); setPendingChallans(snap.metadata.hasPendingWrites) },
       () => setChallansList([])))
     unsubs.push(onSnapshot(paths.logs(),
       (snap) => setLogsList(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
@@ -98,11 +109,11 @@ export function FirestoreProvider({ children }) {
     unsubs.push(onSnapshot(paths.users(),
       (snap) => setUsersList(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
       () => setUsersList([])))
-    unsubs.push(onSnapshot(paths.incoming(),
-      (snap) => setIncomingList(snap.docs.map(d => normIncoming({ id: d.id, ...d.data() }))),
+    unsubs.push(onSnapshot(paths.incoming(), { includeMetadataChanges: true },
+      (snap) => { setIncomingList(snap.docs.map(d => normIncoming({ id: d.id, ...d.data() }))); setPendingIncoming(snap.metadata.hasPendingWrites) },
       () => setIncomingList([])))
     return () => unsubs.forEach(u => u())
-  }, [authKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [authKey])
 
   // ── writers ──────────────────────────────────────────────────────────────
   const setParties = useCallback((list) => { setPartiesState(list); setDoc(paths.parties(), { list }) }, [])
@@ -240,6 +251,13 @@ export function FirestoreProvider({ children }) {
     )
   }
 
+  const saveState = {
+    pending: pendingChallans || pendingIncoming,
+    failed: failedWrites,
+    clearFailed: () => setFailedWrites(0),
+    note: (p) => { Promise.resolve(p).catch(() => setFailedWrites(n => n + 1)); return p },
+  }
+
   const value = {
     challans,
     moves: flattenChallans(challansList),
@@ -255,6 +273,13 @@ export function FirestoreProvider({ children }) {
     importChallans,
     log,
     cloud: { connected: !error, error },
+    saveState,
   }
-  return <JobWorkCtx.Provider value={value}>{children}</JobWorkCtx.Provider>
+  return (
+    <JobWorkCtx.Provider value={value}>
+      {children}
+      {/* Rendered here so every screen gets it without each page adding it. */}
+      <SaveStatus pending={saveState.pending} failed={saveState.failed} onDismiss={saveState.clearFailed} />
+    </JobWorkCtx.Provider>
+  )
 }
