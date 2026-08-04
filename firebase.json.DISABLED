@@ -1,0 +1,6 @@
+{
+  "_DISABLED_2026-08-04": "DO NOT RESTORE THIS FILE.",
+  "_why": "This config targeted site 'unico-operations' with public 'dist' — i.e. ONLY plating's build. Running `firebase deploy` from this directory would have replaced the SHARED live site and DELETED /welder/ and /freight/ from production. Found by Codex review 2026-08-04.",
+  "_deploy_from": "~/unico-default-site/ ONLY. That folder assembles plating (root) + welder (/welder/) + freight (/freight/) together and is the single place Firebase Hosting may be deployed from.",
+  "_see": "memory/rule-no-multisite-hosting.md, memory/transport-freight-hosting-migration.md"
+}
