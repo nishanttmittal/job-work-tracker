@@ -25,10 +25,19 @@ export default defineConfig({
         // NEVER let the service worker serve the SPA shell for:
         //  • /__/auth/*  — Firebase's reserved auth handler + iframe. Shadowing it made
         //    Google sign-in boot the app inside the auth iframe → recursion → white screen.
-        //  • /welder/*, /freight/*  — co-hosted apps on this same origin. Plating's SW
-        //    scope is '/', so without this it would serve the PLATING shell on their URLs.
+        //  • every co-hosted app path on this same origin. Plating's SW scope is
+        //    '/', so without these it would serve the PLATING shell on their URLs.
         //    Add a new co-hosted app at /x/ ⇒ add /^\/x/ here too.
-        navigateFallbackDenylist: [/^\/__/, /^\/welder/, /^\/freight/],
+        navigateFallbackDenylist: [
+          /^\/__/,
+          /^\/welder/,
+          /^\/freight/,
+          /^\/fitting/,
+          /^\/orders/,
+          /^\/plastic-jobwork/,
+          /^\/billing-slip/,
+          /^\/attendance/,
+        ],
       },
       manifest: {
         name: 'Plating Job Work',
