@@ -37,6 +37,7 @@ export default defineConfig({
           /^\/plastic-jobwork/,
           /^\/billing-slip/,
           /^\/attendance/,
+          /^\/laser/,
         ],
       },
       manifest: {
