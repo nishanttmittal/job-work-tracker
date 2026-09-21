@@ -38,6 +38,7 @@ export default defineConfig({
           /^\/billing-slip/,
           /^\/attendance/,
           /^\/laser/,
+          /^\/powder/,     // Powder Coating app (2026-09): its own SW owns /powder/
         ],
       },
       manifest: {
